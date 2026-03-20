@@ -1,0 +1,7 @@
+# Local development override — builds image from source instead of pulling from GHCR.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+
+services:
+  chef-api:
+    build: .
+    image: chef-api:dev

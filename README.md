@@ -435,6 +435,25 @@ curl -X PATCH \
 
 ---
 
+## Container Registry
+
+The Docker image is published automatically to GitHub Container Registry on every push to `main`.
+
+| Tag | Description |
+|-----|-------------|
+| `ghcr.io/wingsofcobra/chef-api:latest` | Latest build from `main` |
+| `ghcr.io/wingsofcobra/chef-api:sha-<commit>` | Immutable per-commit tag |
+
+Pull the image directly (no build required):
+
+```bash
+docker pull ghcr.io/wingsofcobra/chef-api:latest
+```
+
+Deployment pulls the latest image automatically — no `--build` step needed on the server.
+
+---
+
 ## Deployment
 
 ### Option A: Docker Compose (recommended)
@@ -444,16 +463,26 @@ Bind `BIND_ADDR` to your WireGuard interface IP so the port is only reachable ov
 **First-time server setup:**
 
 ```bash
-git clone https://github.com/WingsOfCobra/chef-api.git ~/chef-api
-cd ~/chef-api
-
+# Create deploy directory and .env
+mkdir -p ~/chef-api && cd ~/chef-api
+curl -O https://raw.githubusercontent.com/WingsOfCobra/chef-api/main/docker-compose.yml
+curl -O https://raw.githubusercontent.com/WingsOfCobra/chef-api/main/.env.example
 cp .env.example .env
 # Edit .env — set CHEF_API_KEY, GITHUB_TOKEN, SSH_HOSTS, BIND_ADDR, etc.
 
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 ```
 
-After that, every push to `main` auto-deploys via GitHub Actions (`docker compose up -d --build`).
+After that, every push to `main` builds a new image and auto-deploys via GitHub Actions (`docker compose pull && docker compose up -d`).
+
+**Local development (build from source):**
+
+```bash
+git clone https://github.com/WingsOfCobra/chef-api.git && cd chef-api
+cp .env.example .env
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+```
 
 ### Option B: PM2 (bare metal)
 
@@ -471,9 +500,16 @@ pm2 startup  # enable auto-start on reboot
 
 ---
 
-## GitHub Actions Auto-Deploy
+## GitHub Actions CI/CD
 
-The workflow at `.github/workflows/deploy.yml` deploys on every push to `main` via SSH.
+The pipeline is split into two workflows:
+
+| Workflow | File | Trigger |
+|----------|------|---------|
+| **Build & Push to GHCR** | `publish.yml` | Every push to `main` |
+| **Deploy to SOLCloud** | `deploy.yml` | After `publish.yml` succeeds |
+
+**Flow:** push to `main` → build & push image to GHCR → SSH deploy pulls latest image.
 
 ### Setting up the deploy key
 
@@ -494,9 +530,9 @@ The workflow at `.github/workflows/deploy.yml` deploys on every push to `main` v
    | `DEPLOY_SSH_KEY` | Contents of `~/.ssh/chef_api_deploy` (private key) |
    | `DEPLOY_HOST` | Server IP or hostname |
    | `DEPLOY_USER` | Deploy user (e.g. `ubuntu`, `deploy`) |
-   | `DEPLOY_DIR` | (optional) Full path to deploy directory; defaults to `$HOME/chef-api` |
+   | `DEPLOY_DIR` | Full path to deploy directory on the server |
 
-4. Push to `main` — the action SSHes in, pulls latest, and runs `docker compose up -d --build`.
+4. Push to `main` — the publish workflow builds and pushes the image, then the deploy workflow SSHes in and runs `docker compose pull && docker compose up -d`.
 
 ---
 
