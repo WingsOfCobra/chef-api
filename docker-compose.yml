@@ -1,0 +1,17 @@
+services:
+  chef-api:
+    build: .
+    ports:
+      - "${BIND_ADDR:-127.0.0.1}:4242:4242"
+    env_file: .env
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${WORKSPACE_PATH:-/workspace}:/workspace:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4242/system/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

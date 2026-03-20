@@ -1,0 +1,43 @@
+name: Deploy to SOLCloud
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            set -e
+
+            DEPLOY_DIR="${{ secrets.DEPLOY_DIR }}"
+            DEPLOY_DIR="${DEPLOY_DIR:-$HOME/chef-api}"
+
+            # First-time setup: clone if not present
+            if [ ! -d "$DEPLOY_DIR" ]; then
+              git clone https://github.com/WingsOfCobra/chef-api.git "$DEPLOY_DIR"
+            fi
+
+            cd "$DEPLOY_DIR"
+
+            # Pull latest
+            git fetch origin main
+            git reset --hard origin/main
+
+            # Build and restart via Docker Compose
+            docker compose up -d --build
+
+            echo "✅ chef-api deployed successfully"
