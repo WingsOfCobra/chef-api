@@ -16,6 +16,7 @@ import {
   restartContainer,
   stopContainer,
   getContainerLogs,
+  getContainerStats,
   getDockerStats,
 } from './docker.service'
 
@@ -159,6 +160,83 @@ describe('docker.service', () => {
       expect(mockClient.get).toHaveBeenCalledWith(
         '/containers/abc123/logs?stdout=true&stderr=true&tail=100'
       )
+    })
+  })
+
+  describe('getContainerStats', () => {
+    it('parses Docker stats snapshot correctly', async () => {
+      mockClient.get
+        .mockResolvedValueOnce({
+          data: {
+            cpu_stats: {
+              cpu_usage: { total_usage: 5000000, percpu_usage: [2500000, 2500000] },
+              system_cpu_usage: 20000000,
+              online_cpus: 2,
+            },
+            precpu_stats: {
+              cpu_usage: { total_usage: 4000000 },
+              system_cpu_usage: 10000000,
+            },
+            memory_stats: { usage: 52428800, limit: 536870912 },
+            networks: {
+              eth0: { rx_bytes: 1048576, tx_bytes: 524288 },
+            },
+            blkio_stats: {
+              io_service_bytes_recursive: [
+                { op: 'read', value: 4096 },
+                { op: 'write', value: 8192 },
+              ],
+            },
+          },
+        })
+        .mockResolvedValueOnce({
+          data: { Name: '/my-container' },
+        })
+
+      const stats = await getContainerStats('abc123')
+
+      expect(stats.id).toBe('abc123')
+      expect(stats.name).toBe('my-container')
+      expect(stats.cpu_percent).toBe(20)
+      expect(stats.memory_usage).toBe(52428800)
+      expect(stats.memory_limit).toBe(536870912)
+      expect(stats.memory_percent).toBeCloseTo(9.77, 1)
+      expect(stats.network_rx).toBe(1048576)
+      expect(stats.network_tx).toBe(524288)
+      expect(stats.block_read).toBe(4096)
+      expect(stats.block_write).toBe(8192)
+      expect(stats.timestamp).toBeDefined()
+    })
+
+    it('handles missing network and blkio data', async () => {
+      mockClient.get
+        .mockResolvedValueOnce({
+          data: {
+            cpu_stats: {
+              cpu_usage: { total_usage: 1000 },
+              system_cpu_usage: 5000,
+              online_cpus: 1,
+            },
+            precpu_stats: {
+              cpu_usage: { total_usage: 1000 },
+              system_cpu_usage: 5000,
+            },
+            memory_stats: { usage: 0, limit: 1 },
+            networks: null,
+            blkio_stats: { io_service_bytes_recursive: null },
+          },
+        })
+        .mockResolvedValueOnce({
+          data: { Name: '/empty' },
+        })
+
+      const stats = await getContainerStats('xyz')
+
+      expect(stats.cpu_percent).toBe(0)
+      expect(stats.network_rx).toBe(0)
+      expect(stats.network_tx).toBe(0)
+      expect(stats.block_read).toBe(0)
+      expect(stats.block_write).toBe(0)
     })
   })
 

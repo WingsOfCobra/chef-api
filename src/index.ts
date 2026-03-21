@@ -13,6 +13,7 @@ import cronRoutes from './routes/cron'
 import hooksRoutes from './routes/hooks'
 import logsRoutes from './routes/logs'
 import emailRoutes from './routes/email'
+import servicesRoutes from './routes/services'
 import { initScheduler } from './services/cron-scheduler'
 import { cleanupOldEvents } from './services/hooks.service'
 import { initLogSources, runIndexCycle } from './services/logs.service'
@@ -57,6 +58,7 @@ async function build() {
         { name: 'Hooks', description: 'Webhook events and notifications' },
         { name: 'Logs', description: 'Log file search and aggregation' },
         { name: 'Email', description: 'Email monitoring and retrieval' },
+        { name: 'Services', description: 'Systemd service monitoring' },
       ],
     },
   })
@@ -83,6 +85,7 @@ async function build() {
   await fastify.register(hooksRoutes, { prefix: '/hooks' })
   await fastify.register(logsRoutes, { prefix: '/logs' })
   await fastify.register(emailRoutes, { prefix: '/email' })
+  await fastify.register(servicesRoutes, { prefix: '/services' })
 
   return fastify
 }

@@ -15,8 +15,38 @@ vi.mock('os', () => ({
     arch: vi.fn(() => 'x64'),
     loadavg: vi.fn(() => [1.0, 0.8, 0.5]),
     homedir: vi.fn(() => '/home/test'),
+    cpus: vi.fn(() => [
+      { model: 'Test CPU', speed: 3000 },
+      { model: 'Test CPU', speed: 3000 },
+    ]),
   },
 }))
+
+vi.mock('fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('fs')>()
+  return {
+    ...actual,
+    default: {
+      ...actual,
+      existsSync: actual.existsSync,
+      readFileSync: actual.readFileSync,
+      mkdirSync: actual.mkdirSync,
+    },
+    readFileSync: vi.fn((path: string, encoding?: string) => {
+      if (path === '/proc/stat') {
+        return 'cpu  1000 200 300 5000 100 50 30 20 0 0\n'
+      }
+      if (path === '/proc/net/dev') {
+        return `Inter-|   Receive                                                |  Transmit
+ face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed
+    lo: 1000 10 0 0 0 0 0 0 1000 10 0 0 0 0 0 0
+  eth0: 5000 50 0 0 0 0 0 0 3000 30 0 0 0 0 0 0
+`
+      }
+      return actual.readFileSync(path, encoding as BufferEncoding)
+    }),
+  }
+})
 
 import { getHealth, getDiskUsage, getTopProcesses } from './system.service'
 
@@ -28,8 +58,8 @@ describe('system.service', () => {
   })
 
   describe('getHealth', () => {
-    it('returns health info with correct structure', () => {
-      const health = getHealth()
+    it('returns health info with correct structure', async () => {
+      const health = await getHealth()
 
       expect(health.status).toBe('ok')
       expect(health.hostname).toBe('test-host')
@@ -42,6 +72,14 @@ describe('system.service', () => {
       expect(health.timestamp).toBeDefined()
       expect(typeof health.uptime).toBe('number')
       expect(typeof health.uptimeHuman).toBe('string')
+      // New fields
+      expect(health.cpu).toBeDefined()
+      expect(health.cpu.cores).toBe(2)
+      expect(health.cpu.model).toBe('Test CPU')
+      expect(typeof health.cpu.usage_percent).toBe('number')
+      expect(health.network).toBeDefined()
+      expect(typeof health.network.rx_bytes).toBe('number')
+      expect(typeof health.network.tx_bytes).toBe('number')
     })
   })
 

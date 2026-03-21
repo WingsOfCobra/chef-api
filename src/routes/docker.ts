@@ -51,6 +51,16 @@ const dockerRoutes: FastifyPluginAsync = async (fastify) => {
     }
   )
 
+  // GET /docker/containers/:id/stats
+  fastify.get<{ Params: { id: string } }>(
+    '/containers/:id/stats',
+    { schema: { tags: ['Docker'] } },
+    async (request) => {
+      const { id } = request.params
+      return await docker.getContainerStats(id)
+    }
+  )
+
   // GET /docker/stats
   fastify.get('/stats', { schema: { tags: ['Docker'] } }, async () => {
     const cacheKey = 'docker:stats'

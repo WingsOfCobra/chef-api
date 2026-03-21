@@ -94,6 +94,20 @@ const todoRoutes: FastifyPluginAsync = async (fastify) => {
 
     return updated
   })
+
+  // DELETE /todo/:id
+  fastify.delete<{ Params: { id: string } }>('/:id', { schema: { tags: ['Todos'] } }, async (request, reply) => {
+    const id = parseInt(request.params.id, 10)
+
+    const existing = db.prepare('SELECT * FROM todos WHERE id = ?').get(id) as Todo | undefined
+    if (!existing) {
+      reply.code(404)
+      return { error: 'Not found' }
+    }
+
+    db.prepare('DELETE FROM todos WHERE id = ?').run(id)
+    reply.code(204)
+  })
 }
 
 export default todoRoutes

@@ -3,14 +3,16 @@ import { FastifyInstance } from 'fastify'
 import { buildApp, authHeaders } from '../test/helpers'
 
 vi.mock('../services/system.service', () => ({
-  getHealth: vi.fn(() => ({
+  getHealth: vi.fn(async () => ({
     status: 'ok',
     uptime: 100,
     uptimeHuman: '1m',
     hostname: 'test',
     platform: 'linux x64',
     nodeVersion: 'v20.0.0',
+    cpu: { usage_percent: 15.2, cores: 4, model: 'Test CPU' },
     memory: { total: '16.00 GB', free: '8.00 GB', usedPercent: '50.0%' },
+    network: { rx_bytes: 5000, tx_bytes: 3000 },
     loadAvg: [1, 0.8, 0.5],
     timestamp: '2025-01-01T00:00:00.000Z',
   })),

@@ -4,7 +4,7 @@ import * as system from '../services/system.service'
 const systemRoutes: FastifyPluginAsync = async (fastify) => {
   // GET /system/health — public, no auth required (handled in auth plugin)
   fastify.get('/health', { schema: { tags: ['System'] } }, async () => {
-    return system.getHealth()
+    return await system.getHealth()
   })
 
   // GET /system/disk

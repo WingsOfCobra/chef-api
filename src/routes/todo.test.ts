@@ -101,6 +101,32 @@ describe('todo routes', () => {
     expect(res.statusCode).toBe(404)
   })
 
+  it('DELETE /todo/:id deletes a todo item', async () => {
+    const createRes = await app.inject({
+      method: 'POST',
+      url: '/todo',
+      headers: { ...authHeaders(), 'content-type': 'application/json' },
+      payload: { title: 'To delete' },
+    })
+    const created = createRes.json()
+
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/todo/${created.id}`,
+      headers: authHeaders(),
+    })
+    expect(res.statusCode).toBe(204)
+  })
+
+  it('DELETE /todo/:id returns 404 for non-existent item', async () => {
+    const res = await app.inject({
+      method: 'DELETE',
+      url: '/todo/99999',
+      headers: authHeaders(),
+    })
+    expect(res.statusCode).toBe(404)
+  })
+
   it('GET /todo requires auth', async () => {
     const res = await app.inject({ method: 'GET', url: '/todo' })
     expect(res.statusCode).toBe(401)

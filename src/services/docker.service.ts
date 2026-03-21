@@ -99,6 +99,88 @@ export async function getContainerLogs(id: string, lines = 100): Promise<string>
   return String(data)
 }
 
+export interface ContainerStats {
+  id: string
+  name: string
+  cpu_percent: number
+  memory_usage: number
+  memory_limit: number
+  memory_percent: number
+  network_rx: number
+  network_tx: number
+  block_read: number
+  block_write: number
+  timestamp: string
+}
+
+export async function getContainerStats(id: string): Promise<ContainerStats> {
+  const client = dockerClient()
+  const { data: stats } = await client.get(`/containers/${id}/stats?stream=false`)
+  const { data: inspect } = await client.get(`/containers/${id}/json`)
+
+  const name = (inspect.Name as string)?.replace(/^\//, '') ?? id
+
+  // CPU %
+  const cpuDelta =
+    (stats.cpu_stats?.cpu_usage?.total_usage ?? 0) -
+    (stats.precpu_stats?.cpu_usage?.total_usage ?? 0)
+  const systemDelta =
+    (stats.cpu_stats?.system_cpu_usage ?? 0) -
+    (stats.precpu_stats?.system_cpu_usage ?? 0)
+  const numCpus =
+    stats.cpu_stats?.online_cpus ??
+    stats.cpu_stats?.cpu_usage?.percpu_usage?.length ??
+    1
+  const cpuPercent =
+    systemDelta > 0
+      ? Math.round((cpuDelta / systemDelta) * numCpus * 100 * 100) / 100
+      : 0
+
+  // Memory
+  const memoryUsage = stats.memory_stats?.usage ?? 0
+  const memoryLimit = stats.memory_stats?.limit ?? 1
+  const memoryPercent =
+    Math.round((memoryUsage / memoryLimit) * 100 * 100) / 100
+
+  // Network: sum across all interfaces
+  let networkRx = 0
+  let networkTx = 0
+  if (stats.networks) {
+    for (const iface of Object.values(stats.networks)) {
+      const net = iface as { rx_bytes?: number; tx_bytes?: number }
+      networkRx += net.rx_bytes ?? 0
+      networkTx += net.tx_bytes ?? 0
+    }
+  }
+
+  // Block I/O
+  let blockRead = 0
+  let blockWrite = 0
+  const ioEntries = stats.blkio_stats?.io_service_bytes_recursive as
+    | Array<{ op: string; value: number }>
+    | null
+  if (ioEntries) {
+    for (const entry of ioEntries) {
+      if (entry.op.toLowerCase() === 'read') blockRead += entry.value
+      if (entry.op.toLowerCase() === 'write') blockWrite += entry.value
+    }
+  }
+
+  return {
+    id,
+    name,
+    cpu_percent: cpuPercent,
+    memory_usage: memoryUsage,
+    memory_limit: memoryLimit,
+    memory_percent: memoryPercent,
+    network_rx: networkRx,
+    network_tx: networkTx,
+    block_read: blockRead,
+    block_write: blockWrite,
+    timestamp: new Date().toISOString(),
+  }
+}
+
 export async function getDockerStats(): Promise<DockerStats> {
   const client = dockerClient()
   const [containersRes, dfRes] = await Promise.all([

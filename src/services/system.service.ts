@@ -1,6 +1,7 @@
 import { execSync } from 'child_process'
 import os from 'os'
 import fs from 'fs'
+import { readFileSync } from 'fs'
 
 export interface DiskMount {
   filesystem: string
@@ -26,10 +27,19 @@ export interface HealthInfo {
   hostname: string
   platform: string
   nodeVersion: string
+  cpu: {
+    usage_percent: number
+    cores: number
+    model: string
+  }
   memory: {
     total: string
     free: string
     usedPercent: string
+  }
+  network: {
+    rx_bytes: number
+    tx_bytes: number
   }
   loadAvg: number[]
   timestamp: string
@@ -55,12 +65,60 @@ function formatUptime(seconds: number): string {
   return parts.join(' ')
 }
 
-export function getHealth(): HealthInfo {
+function parseProcStat(): { idle: number; total: number } {
+  try {
+    const content = readFileSync('/proc/stat', 'utf-8')
+    const firstLine = content.split('\n')[0]
+    const fields = firstLine.replace(/^cpu\s+/, '').trim().split(/\s+/).map(Number)
+    // fields: user nice system idle iowait irq softirq steal guest guest_nice
+    const idle = (fields[3] ?? 0) + (fields[4] ?? 0) // idle + iowait
+    const total = fields.reduce((sum, val) => sum + val, 0)
+    return { idle, total }
+  } catch {
+    return { idle: 0, total: 0 }
+  }
+}
+
+async function getCpuUsage(): Promise<number> {
+  const first = parseProcStat()
+  await new Promise((resolve) => setTimeout(resolve, 100))
+  const second = parseProcStat()
+
+  const idleDelta = second.idle - first.idle
+  const totalDelta = second.total - first.total
+  if (totalDelta === 0) return 0
+  return Math.round(((totalDelta - idleDelta) / totalDelta) * 1000) / 10
+}
+
+function getNetworkBytes(): { rx_bytes: number; tx_bytes: number } {
+  try {
+    const content = readFileSync('/proc/net/dev', 'utf-8')
+    const lines = content.trim().split('\n').slice(2) // skip header lines
+    let rx = 0
+    let tx = 0
+    for (const line of lines) {
+      const parts = line.trim().split(/\s+/)
+      const iface = parts[0]?.replace(':', '')
+      if (iface === 'lo') continue
+      rx += parseInt(parts[1] ?? '0', 10)
+      tx += parseInt(parts[9] ?? '0', 10)
+    }
+    return { rx_bytes: rx, tx_bytes: tx }
+  } catch {
+    return { rx_bytes: 0, tx_bytes: 0 }
+  }
+}
+
+export async function getHealth(): Promise<HealthInfo> {
   const uptimeMs = Date.now() - startTime
   const uptimeSec = Math.floor(uptimeMs / 1000)
   const totalMem = os.totalmem()
   const freeMem = os.freemem()
   const usedPercent = (((totalMem - freeMem) / totalMem) * 100).toFixed(1)
+
+  const cpus = os.cpus()
+  const cpuUsage = await getCpuUsage()
+  const network = getNetworkBytes()
 
   return {
     status: 'ok',
@@ -69,11 +127,17 @@ export function getHealth(): HealthInfo {
     hostname: os.hostname(),
     platform: `${os.platform()} ${os.arch()}`,
     nodeVersion: process.version,
+    cpu: {
+      usage_percent: cpuUsage,
+      cores: cpus.length,
+      model: cpus[0]?.model ?? 'unknown',
+    },
     memory: {
       total: formatBytes(totalMem),
       free: formatBytes(freeMem),
       usedPercent: `${usedPercent}%`,
     },
+    network,
     loadAvg: os.loadavg(),
     timestamp: new Date().toISOString(),
   }
