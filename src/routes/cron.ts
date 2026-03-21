@@ -16,7 +16,7 @@ const createJobSchema = z.object({
 
 const cronRoutes: FastifyPluginAsync = async (fastify) => {
   // GET /cron/jobs — list all scheduled jobs with next run time
-  fastify.get('/jobs', async () => {
+  fastify.get('/jobs', { schema: { tags: ['Cron'] } }, async () => {
     const cacheKey = 'cron:jobs'
     const cached = fastify.cache.get(cacheKey)
     if (cached) return cached
@@ -33,7 +33,7 @@ const cronRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   // POST /cron/jobs — create a cron job
-  fastify.post('/jobs', async (request, reply) => {
+  fastify.post('/jobs', { schema: { tags: ['Cron'] } }, async (request, reply) => {
     const body = createJobSchema.parse(request.body)
 
     const job = cronService.createJob({
@@ -60,7 +60,7 @@ const cronRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   // DELETE /cron/jobs/:id — remove a job
-  fastify.delete<{ Params: { id: string } }>('/jobs/:id', async (request, reply) => {
+  fastify.delete<{ Params: { id: string } }>('/jobs/:id', { schema: { tags: ['Cron'] } }, async (request, reply) => {
     const id = parseInt(request.params.id, 10)
 
     const deleted = cronService.deleteJob(id)
@@ -76,7 +76,7 @@ const cronRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   // POST /cron/jobs/:id/run — trigger job immediately
-  fastify.post<{ Params: { id: string } }>('/jobs/:id/run', async (request, reply) => {
+  fastify.post<{ Params: { id: string } }>('/jobs/:id/run', { schema: { tags: ['Cron'] } }, async (request, reply) => {
     const id = parseInt(request.params.id, 10)
 
     const job = cronService.getJob(id)
@@ -92,7 +92,7 @@ const cronRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   // GET /cron/jobs/:id/history — last N run results
-  fastify.get<{ Params: { id: string } }>('/jobs/:id/history', async (request) => {
+  fastify.get<{ Params: { id: string } }>('/jobs/:id/history', { schema: { tags: ['Cron'] } }, async (request) => {
     const id = parseInt(request.params.id, 10)
     const query = request.query as { limit?: string }
     const limit = query.limit ? parseInt(query.limit, 10) : 20
@@ -106,7 +106,7 @@ const cronRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   // GET /cron/presets — list available presets
-  fastify.get('/presets', async () => {
+  fastify.get('/presets', { schema: { tags: ['Cron'] } }, async () => {
     return cronService.getPresets()
   })
 }

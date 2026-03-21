@@ -5,7 +5,7 @@ import { db } from '../db'
 
 const sshRoutes: FastifyPluginAsync = async (fastify) => {
   // GET /ssh/hosts
-  fastify.get('/hosts', async () => {
+  fastify.get('/hosts', { schema: { tags: ['SSH'] } }, async () => {
     return ssh.listHosts()
   })
 
@@ -15,7 +15,7 @@ const sshRoutes: FastifyPluginAsync = async (fastify) => {
     command: z.string().min(1),
   })
 
-  fastify.post('/run', async (request, reply) => {
+  fastify.post('/run', { schema: { tags: ['SSH'] } }, async (request, reply) => {
     const body = runSchema.parse(request.body)
 
     const result = await ssh.runCommand(body.host, body.command)

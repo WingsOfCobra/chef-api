@@ -47,6 +47,17 @@ async function build() {
         },
       },
       security: [{ apiKey: [] }],
+      tags: [
+        { name: 'GitHub', description: 'GitHub repositories, PRs, issues, workflows, notifications' },
+        { name: 'Docker', description: 'Docker containers, logs, stats' },
+        { name: 'SSH', description: 'SSH hosts and remote command execution' },
+        { name: 'System', description: 'System health, disk, and process information' },
+        { name: 'Todos', description: 'Todo item management' },
+        { name: 'Cron', description: 'Cron job scheduling and management' },
+        { name: 'Hooks', description: 'Webhook events and notifications' },
+        { name: 'Logs', description: 'Log file search and aggregation' },
+        { name: 'Email', description: 'Email monitoring and retrieval' },
+      ],
     },
   })
 

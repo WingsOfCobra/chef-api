@@ -16,7 +16,7 @@ const notifySchema = z.object({
 
 const hooksRoutes: FastifyPluginAsync = async (fastify) => {
   // POST /hooks/agent-event — receive events from OpenClaw agents (webhook secret auth, not API key)
-  fastify.post('/agent-event', async (request, reply) => {
+  fastify.post('/agent-event', { schema: { tags: ['Hooks'] } }, async (request, reply) => {
     // Require webhook secret to be configured — endpoint is exempt from API key auth
     if (!config.webhookSecret) {
       reply.code(503)
@@ -47,7 +47,7 @@ const hooksRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   // GET /hooks/events — list recent events (paginated)
-  fastify.get('/events', async (request) => {
+  fastify.get('/events', { schema: { tags: ['Hooks'] } }, async (request) => {
     const query = request.query as { page?: string; limit?: string; eventType?: string }
 
     return hooksService.listEvents({
@@ -58,7 +58,7 @@ const hooksRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   // POST /hooks/notify — send notification to Telegram/Discord
-  fastify.post('/notify', async (request, reply) => {
+  fastify.post('/notify', { schema: { tags: ['Hooks'] } }, async (request, reply) => {
     const body = notifySchema.parse(request.body)
 
     await hooksService.sendNotification(body.channel, body.message)

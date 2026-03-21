@@ -4,7 +4,7 @@ import * as github from '../services/github.service'
 
 const githubRoutes: FastifyPluginAsync = async (fastify) => {
   // GET /github/repos
-  fastify.get('/repos', async (request, reply) => {
+  fastify.get('/repos', { schema: { tags: ['GitHub'] } }, async (request, reply) => {
     const query = request.query as { org?: string }
     const cacheKey = `github:repos:${query.org ?? 'me'}`
 
@@ -19,6 +19,7 @@ const githubRoutes: FastifyPluginAsync = async (fastify) => {
   // GET /github/repos/:owner/:repo/prs
   fastify.get<{ Params: { owner: string; repo: string } }>(
     '/repos/:owner/:repo/prs',
+    { schema: { tags: ['GitHub'] } },
     async (request) => {
       const { owner, repo } = request.params
       const cacheKey = `github:prs:${owner}/${repo}`
@@ -35,6 +36,7 @@ const githubRoutes: FastifyPluginAsync = async (fastify) => {
   // GET /github/repos/:owner/:repo/issues
   fastify.get<{ Params: { owner: string; repo: string } }>(
     '/repos/:owner/:repo/issues',
+    { schema: { tags: ['GitHub'] } },
     async (request) => {
       const { owner, repo } = request.params
       const cacheKey = `github:issues:${owner}/${repo}`
@@ -57,6 +59,7 @@ const githubRoutes: FastifyPluginAsync = async (fastify) => {
 
   fastify.post<{ Params: { owner: string; repo: string } }>(
     '/repos/:owner/:repo/issues',
+    { schema: { tags: ['GitHub'] } },
     async (request, reply) => {
       const { owner, repo } = request.params
       const body = createIssueSchema.parse(request.body)
@@ -74,6 +77,7 @@ const githubRoutes: FastifyPluginAsync = async (fastify) => {
   // GET /github/repos/:owner/:repo/workflows
   fastify.get<{ Params: { owner: string; repo: string } }>(
     '/repos/:owner/:repo/workflows',
+    { schema: { tags: ['GitHub'] } },
     async (request) => {
       const { owner, repo } = request.params
       const cacheKey = `github:workflows:${owner}/${repo}`
@@ -88,7 +92,7 @@ const githubRoutes: FastifyPluginAsync = async (fastify) => {
   )
 
   // GET /github/notifications
-  fastify.get('/notifications', async (request) => {
+  fastify.get('/notifications', { schema: { tags: ['GitHub'] } }, async (request) => {
     const cacheKey = 'github:notifications'
 
     const cached = fastify.cache.get(cacheKey)

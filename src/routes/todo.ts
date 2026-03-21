@@ -30,7 +30,7 @@ function parseTodoMd(): Array<{ id: number; title: string; completed: boolean; s
 
 const todoRoutes: FastifyPluginAsync = async (fastify) => {
   // GET /todo
-  fastify.get('/', async () => {
+  fastify.get('/', { schema: { tags: ['Todos'] } }, async () => {
     const dbItems = db.prepare('SELECT * FROM todos ORDER BY created_at DESC').all() as Todo[]
     const fileItems = parseTodoMd()
     return {
@@ -46,7 +46,7 @@ const todoRoutes: FastifyPluginAsync = async (fastify) => {
     description: z.string().optional(),
   })
 
-  fastify.post('/', async (request, reply) => {
+  fastify.post('/', { schema: { tags: ['Todos'] } }, async (request, reply) => {
     const body = createSchema.parse(request.body)
 
     const result = db
@@ -66,7 +66,7 @@ const todoRoutes: FastifyPluginAsync = async (fastify) => {
     completed: z.boolean().optional(),
   })
 
-  fastify.patch<{ Params: { id: string } }>('/:id', async (request, reply) => {
+  fastify.patch<{ Params: { id: string } }>('/:id', { schema: { tags: ['Todos'] } }, async (request, reply) => {
     const id = parseInt(request.params.id, 10)
     const body = updateSchema.parse(request.body)
 

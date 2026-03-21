@@ -3,7 +3,7 @@ import * as logsService from '../services/logs.service'
 
 const logsRoutes: FastifyPluginAsync = async (fastify) => {
   // GET /logs/files — list configured log sources
-  fastify.get('/files', async () => {
+  fastify.get('/files', { schema: { tags: ['Logs'] } }, async () => {
     const cacheKey = 'logs:files'
     const cached = fastify.cache.get(cacheKey)
     if (cached) return cached
@@ -14,7 +14,7 @@ const logsRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   // GET /logs/tail/:source — tail N lines from a source
-  fastify.get<{ Params: { source: string } }>('/tail/:source', async (request) => {
+  fastify.get<{ Params: { source: string } }>('/tail/:source', { schema: { tags: ['Logs'] } }, async (request) => {
     const { source } = request.params
     const query = request.query as { lines?: string }
     const lines = query.lines ? parseInt(query.lines, 10) : undefined
@@ -26,7 +26,7 @@ const logsRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   // GET /logs/search — full-text search across indexed logs
-  fastify.get('/search', async (request, reply) => {
+  fastify.get('/search', { schema: { tags: ['Logs'] } }, async (request, reply) => {
     const query = request.query as { q?: string; source?: string; limit?: string; offset?: string }
 
     if (!query.q) {
@@ -45,7 +45,7 @@ const logsRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   // GET /logs/stats — index statistics
-  fastify.get('/stats', async () => {
+  fastify.get('/stats', { schema: { tags: ['Logs'] } }, async () => {
     return logsService.getIndexStats()
   })
 }
