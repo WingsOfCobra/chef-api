@@ -15,10 +15,13 @@ export type SSHHost = z.infer<typeof sshHostSchema>
 function parseSSHHosts(raw: string): SSHHost[] {
   if (!raw) return []
   return raw.split(',').map((entry) => {
-    const [name, rest] = entry.split(':')
-    const atIdx = rest.lastIndexOf('@')
-    const user = rest.substring(0, atIdx)
-    const afterAt = rest.substring(atIdx + 1)
+    // Format: name:user@host:keypath
+    const firstColon = entry.indexOf(':')
+    const name = entry.substring(0, firstColon)
+    const remainder = entry.substring(firstColon + 1) // user@host:keypath
+    const atIdx = remainder.lastIndexOf('@')
+    const user = remainder.substring(0, atIdx)
+    const afterAt = remainder.substring(atIdx + 1) // host:keypath
     const colonIdx = afterAt.indexOf(':')
     const host = colonIdx >= 0 ? afterAt.substring(0, colonIdx) : afterAt
     const privateKeyPath = colonIdx >= 0 ? afterAt.substring(colonIdx + 1) : '~/.ssh/id_rsa'
