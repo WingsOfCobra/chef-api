@@ -1,6 +1,6 @@
 import { FastifyPluginAsync } from 'fastify'
-import { execSync } from 'child_process'
 import { config } from '../config'
+import { runCommand } from '../services/ssh.service'
 
 interface ServiceStatus {
   name: string
@@ -68,20 +68,24 @@ const servicesRoutes: FastifyPluginAsync = async (fastify) => {
   // GET /services/status
   fastify.get('/status', { schema: { tags: ['Services'] } }, async () => {
     const serviceNames = config.monitoredServices
-    if (serviceNames.length === 0) {
-      return { services: [], timestamp: new Date().toISOString() }
+    const timestamp = new Date().toISOString()
+
+    if (serviceNames.length === 0 || !config.servicesSSHHost) {
+      return { services: [], timestamp }
     }
 
     try {
-      const output = execSync(
-        `systemctl show ${serviceNames.join(' ')} --property=ActiveState,SubState,MainPID,MemoryCurrent,ActiveEnterTimestamp --no-pager`,
-        { encoding: 'utf-8' }
-      )
+      const cmd = `systemctl show ${serviceNames.join(' ')} --property=ActiveState,SubState,MainPID,MemoryCurrent,ActiveEnterTimestamp --no-pager`
+      const result = await runCommand(config.servicesSSHHost, cmd)
 
-      const services = parseServiceBlocks(output, serviceNames)
-      return { services, timestamp: new Date().toISOString() }
+      if (result.code !== 0) {
+        return { services: [], timestamp }
+      }
+
+      const services = parseServiceBlocks(result.stdout, serviceNames)
+      return { services, timestamp }
     } catch {
-      return { services: [], timestamp: new Date().toISOString() }
+      return { services: [], timestamp }
     }
   })
 }

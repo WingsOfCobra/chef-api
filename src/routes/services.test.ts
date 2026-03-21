@@ -1,13 +1,12 @@
 import { vi, describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { FastifyInstance } from 'fastify'
 import { buildApp, authHeaders } from '../test/helpers'
-import { execSync } from 'child_process'
 
-vi.mock('child_process', () => ({
-  execSync: vi.fn(),
+vi.mock('../services/ssh.service', () => ({
+  runCommand: vi.fn(),
+  getHost: vi.fn(),
+  listHosts: vi.fn(() => []),
 }))
-
-const mockExecSync = vi.mocked(execSync)
 
 import servicesRoutes from './services'
 
