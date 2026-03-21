@@ -9,6 +9,13 @@ import dockerRoutes from './routes/docker'
 import sshRoutes from './routes/ssh'
 import systemRoutes from './routes/system'
 import todoRoutes from './routes/todo'
+import cronRoutes from './routes/cron'
+import hooksRoutes from './routes/hooks'
+import logsRoutes from './routes/logs'
+import emailRoutes from './routes/email'
+import { initScheduler } from './services/cron-scheduler'
+import { cleanupOldEvents } from './services/hooks.service'
+import { initLogSources, runIndexCycle } from './services/logs.service'
 
 async function build() {
   const fastify = Fastify({
@@ -61,6 +68,10 @@ async function build() {
   await fastify.register(sshRoutes, { prefix: '/ssh' })
   await fastify.register(systemRoutes, { prefix: '/system' })
   await fastify.register(todoRoutes, { prefix: '/todo' })
+  await fastify.register(cronRoutes, { prefix: '/cron' })
+  await fastify.register(hooksRoutes, { prefix: '/hooks' })
+  await fastify.register(logsRoutes, { prefix: '/logs' })
+  await fastify.register(emailRoutes, { prefix: '/email' })
 
   return fastify
 }
@@ -70,6 +81,14 @@ async function main() {
 
   try {
     await fastify.listen({ port: config.port, host: config.host })
+    initScheduler()
+    initLogSources()
+    // Index log sources periodically
+    if (config.logSources.length > 0) {
+      setInterval(() => runIndexCycle(), config.logIndexIntervalSeconds * 1000)
+    }
+    // Clean up expired hook events every 6 hours
+    setInterval(() => cleanupOldEvents(), 6 * 60 * 60 * 1000)
     fastify.log.info(`🍳 Chef API running at http://${config.host}:${config.port}`)
     fastify.log.info(`📚 Swagger docs at http://${config.host}:${config.port}/docs`)
   } catch (err) {

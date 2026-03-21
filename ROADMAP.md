@@ -4,9 +4,9 @@ This document tracks what's built, what's planned, and what's dreamed about for 
 
 ---
 
-## Current Status: Phase 1 MVP ✅
+## Current Status: Phase 2 Automation & Integration ✅
 
-A working Fastify/TypeScript API covering the four core domains needed for daily orchestration. All routes are auth-protected, responses are SQLite-cached, and OpenAPI docs live at `/docs`.
+Phase 1 MVP and Phase 2 Automation are complete. The API now covers 9 domains with cron scheduling, log aggregation, webhook hooks, and email monitoring on top of the original five. Test infrastructure (Vitest, 156 tests) and CI workflow are in place.
 
 **What's in Phase 1:**
 
@@ -52,7 +52,7 @@ A working Fastify/TypeScript API covering the four core domains needed for daily
 
 ---
 
-## Phase 2: Automation & Integration
+## Phase 2: Automation & Integration (built)
 
 The goal of Phase 2 is to make Chef API a real automation hub: scheduled jobs, email awareness, log aggregation, and hooks that let OpenClaw agents trigger and observe work.
 
