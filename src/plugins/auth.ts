@@ -14,7 +14,7 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
     async (request: FastifyRequest, reply: FastifyReply) => {
       const apiKey = request.headers['x-chef-api-key']
       if (!apiKey || apiKey !== config.apiKey) {
-        reply.code(401).send({
+        return reply.code(401).send({
           error: 'Unauthorized',
           message: 'Missing or invalid X-Chef-API-Key header',
         })
@@ -27,7 +27,8 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
     // Skip swagger docs routes
     if (
       request.url.startsWith('/docs') ||
-      request.url === '/system/health'
+      request.url === '/system/health' ||
+      request.url === '/hooks/agent-event'
     ) {
       return
     }

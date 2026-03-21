@@ -26,6 +26,28 @@ function parseSSHHosts(raw: string): SSHHost[] {
   })
 }
 
+export interface LogSourceConfig {
+  name: string
+  type: 'file' | 'journald' | 'docker'
+  path: string
+}
+
+function parseLogSources(raw: string): LogSourceConfig[] {
+  if (!raw) return []
+  return raw.split(',').map((entry) => {
+    const parts = entry.trim().split(':')
+    const name = parts[0]
+    const typePart = parts[1] as 'file' | 'journald' | 'docker' | undefined
+    const pathPart = parts.slice(2).join(':') || parts[1] || ''
+    // Format: name:type:path  OR  name:path (defaults to 'file')
+    if (typePart === 'file' || typePart === 'journald' || typePart === 'docker') {
+      return { name, type: typePart, path: pathPart }
+    }
+    // Default: treat second part as path, type as 'file'
+    return { name, type: 'file' as const, path: parts.slice(1).join(':') }
+  })
+}
+
 const envSchema = z.object({
   CHEF_API_KEY: z.string().min(1),
   GITHUB_TOKEN: z.string().optional().default(''),
@@ -34,6 +56,21 @@ const envSchema = z.object({
   DOCKER_SOCKET: z.string().default('/var/run/docker.sock'),
   SSH_HOSTS: z.string().optional().default(''),
   TODO_PATH: z.string().default('/path/to/TODO.md'),
+  CRON_TIMEZONE: z.string().default('UTC'),
+  WEBHOOK_SECRET: z.string().default(''),
+  NOTIFY_TELEGRAM_BOT_TOKEN: z.string().default(''),
+  NOTIFY_TELEGRAM_CHAT_ID: z.string().default(''),
+  NOTIFY_DISCORD_WEBHOOK_URL: z.string().default(''),
+  HOOK_EVENT_TTL_DAYS: z.coerce.number().default(30),
+  LOG_SOURCES: z.string().default(''),
+  LOG_INDEX_INTERVAL_SECONDS: z.coerce.number().default(300),
+  LOG_TAIL_DEFAULT_LINES: z.coerce.number().default(100),
+  IMAP_HOST: z.string().default(''),
+  IMAP_PORT: z.coerce.number().default(993),
+  IMAP_USER: z.string().default(''),
+  IMAP_PASS: z.string().default(''),
+  IMAP_TLS: z.string().default('true').transform((v) => v === 'true'),
+  EMAIL_CACHE_TTL_SECONDS: z.coerce.number().default(300),
 })
 
 const parsed = envSchema.safeParse(process.env)
@@ -54,6 +91,21 @@ export const config = {
   dockerSocket: env.DOCKER_SOCKET,
   sshHosts: parseSSHHosts(env.SSH_HOSTS),
   todoPath: env.TODO_PATH,
+  cronTimezone: env.CRON_TIMEZONE,
+  webhookSecret: env.WEBHOOK_SECRET,
+  notifyTelegramBotToken: env.NOTIFY_TELEGRAM_BOT_TOKEN,
+  notifyTelegramChatId: env.NOTIFY_TELEGRAM_CHAT_ID,
+  notifyDiscordWebhookUrl: env.NOTIFY_DISCORD_WEBHOOK_URL,
+  hookEventTtlDays: env.HOOK_EVENT_TTL_DAYS,
+  logSources: parseLogSources(env.LOG_SOURCES),
+  logIndexIntervalSeconds: env.LOG_INDEX_INTERVAL_SECONDS,
+  logTailDefaultLines: env.LOG_TAIL_DEFAULT_LINES,
+  imapHost: env.IMAP_HOST,
+  imapPort: env.IMAP_PORT,
+  imapUser: env.IMAP_USER,
+  imapPass: env.IMAP_PASS,
+  imapTls: env.IMAP_TLS,
+  emailCacheTtlSeconds: env.EMAIL_CACHE_TTL_SECONDS,
 }
 
 export type Config = typeof config
