@@ -16,6 +16,7 @@ import logsRoutes from './routes/logs'
 import emailRoutes from './routes/email'
 import servicesRoutes from './routes/services'
 import alertsRoutes from './routes/alerts'
+import secretsRoutes from './routes/secrets'
 import ansibleRoutes from './routes/ansible'
 import fleetRoutes from './routes/fleet'
 import metricsRoutes from './routes/metrics'
@@ -67,6 +68,7 @@ async function build() {
         { name: 'Email', description: 'Email monitoring and retrieval' },
         { name: 'Services', description: 'Systemd service monitoring' },
         { name: 'Alerts', description: 'Alert rules and webhook notifications' },
+        { name: 'Secrets', description: 'Bitwarden secrets vault integration' },
         { name: 'Ansible', description: 'Ansible playbook execution and job management' },
         { name: 'Fleet', description: 'Multi-server fleet management and monitoring' },
         { name: 'Metrics', description: 'Prometheus and JSON system metrics' },
@@ -99,6 +101,7 @@ async function build() {
   await fastify.register(emailRoutes, { prefix: '/email' })
   await fastify.register(servicesRoutes, { prefix: '/services' })
   await fastify.register(alertsRoutes, { prefix: '/alerts' })
+  await fastify.register(secretsRoutes, { prefix: '/secrets' })
   await fastify.register(ansibleRoutes, { prefix: '/ansible' })
   await fastify.register(fleetRoutes, { prefix: '/fleet' })
   await fastify.register(metricsRoutes, { prefix: '/metrics' })
