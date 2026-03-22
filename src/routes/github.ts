@@ -291,6 +291,54 @@ const githubRoutes: FastifyPluginAsync = async (fastify) => {
     }
   )
 
+  // GET /github/prs — aggregated across top repos
+  fastify.get('/prs', {
+    schema: {
+      tags: ['GitHub'],
+      summary: 'List all open PRs across top repos',
+      response: { 200: { type: 'array', items: prSchema } },
+    },
+  }, async () => {
+    const cacheKey = 'github:all-prs'
+    const cached = fastify.cache.get(cacheKey)
+    if (cached) return cached
+    const prs = await github.listAllPRs()
+    fastify.cache.set(cacheKey, prs, 120)
+    return prs
+  })
+
+  // GET /github/issues — aggregated across top repos
+  fastify.get('/issues', {
+    schema: {
+      tags: ['GitHub'],
+      summary: 'List all open issues across top repos',
+      response: { 200: { type: 'array', items: issueSchema } },
+    },
+  }, async () => {
+    const cacheKey = 'github:all-issues'
+    const cached = fastify.cache.get(cacheKey)
+    if (cached) return cached
+    const issues = await github.listAllIssues()
+    fastify.cache.set(cacheKey, issues, 120)
+    return issues
+  })
+
+  // GET /github/workflows — aggregated across top repos
+  fastify.get('/workflows', {
+    schema: {
+      tags: ['GitHub'],
+      summary: 'List recent workflows across top repos',
+      response: { 200: { type: 'array', items: workflowRunSchema } },
+    },
+  }, async () => {
+    const cacheKey = 'github:all-workflows'
+    const cached = fastify.cache.get(cacheKey)
+    if (cached) return cached
+    const wf = await github.listAllWorkflows()
+    fastify.cache.set(cacheKey, wf, 120)
+    return wf
+  })
+
   // GET /github/notifications
   // Cached for 30s with timeout protection against slow GitHub API
   fastify.get('/notifications', {

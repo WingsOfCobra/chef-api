@@ -159,27 +159,18 @@ export async function listPRs(owner: string, repo: string): Promise<PRSummary[]>
     per_page: 50,
   })
 
-  const prs: PRSummary[] = []
-
-  for (const pr of data) {
+  const prs = await Promise.all(data.map(async (pr) => {
     let ciStatus: string | null = null
     try {
       const { data: checks } = await octokit.checks.listForRef({
-        owner,
-        repo,
-        ref: pr.head.sha,
-        per_page: 10,
+        owner, repo, ref: pr.head.sha, per_page: 10,
       })
-      const statuses = checks.check_runs.map((c) => c.conclusion).filter(Boolean)
+      const statuses = checks.check_runs.map(c => c.conclusion).filter(Boolean)
       if (statuses.includes('failure')) ciStatus = 'failure'
       else if (statuses.includes('success')) ciStatus = 'success'
-      else if (checks.check_runs.some((c) => c.status === 'in_progress')) ciStatus = 'pending'
-      else ciStatus = null
-    } catch {
-      ciStatus = null
-    }
-
-    prs.push({
+      else if (checks.check_runs.some(c => c.status === 'in_progress')) ciStatus = 'pending'
+    } catch { ciStatus = null }
+    return {
       number: pr.number,
       title: pr.title,
       author: pr.user?.login ?? 'unknown',
@@ -188,9 +179,8 @@ export async function listPRs(owner: string, repo: string): Promise<PRSummary[]>
       url: pr.html_url,
       draft: pr.draft ?? false,
       ciStatus,
-    })
-  }
-
+    }
+  }))
   return prs
 }
 
@@ -337,6 +327,45 @@ export async function listReleases(owner: string, repo: string): Promise<Release
     author: r.author?.login ?? 'unknown',
     url: r.html_url,
   }))
+}
+
+export async function listAllPRs(): Promise<PRSummary[]> {
+  const repos = await listRepos()
+  const top5 = repos.slice(0, 5)
+  const results = await Promise.allSettled(
+    top5.map(r => {
+      const [owner, name] = r.fullName.split('/')
+      return listPRs(owner, name)
+    })
+  )
+  return results.flatMap(r => r.status === 'fulfilled' ? r.value : [])
+}
+
+export async function listAllIssues(): Promise<IssueSummary[]> {
+  const repos = await listRepos()
+  const top5 = repos.slice(0, 5)
+  const results = await Promise.allSettled(
+    top5.map(r => {
+      const [owner, name] = r.fullName.split('/')
+      return listIssues(owner, name)
+    })
+  )
+  return results.flatMap(r => r.status === 'fulfilled' ? r.value : [])
+}
+
+export async function listAllWorkflows(): Promise<WorkflowRun[]> {
+  const repos = await listRepos()
+  const top5 = repos.slice(0, 5)
+  const results = await Promise.allSettled(
+    top5.map(r => {
+      const [owner, name] = r.fullName.split('/')
+      return listWorkflowRuns(owner, name)
+    })
+  )
+  return results
+    .flatMap(r => r.status === 'fulfilled' ? r.value : [])
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, 20)
 }
 
 export async function listNotifications(): Promise<Notification[]> {
