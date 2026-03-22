@@ -88,7 +88,10 @@ describe('logs routes', () => {
       })
 
       expect(res.statusCode).toBe(400)
-      expect(res.json().error).toContain('Missing')
+      // Schema validation now catches missing 'q' before the handler runs.
+      // Fastify returns { error: 'Bad Request', message: "querystring must have required property 'q'" }
+      const body = res.json()
+      expect(body.message ?? body.error).toMatch(/q|Missing|Bad Request/i)
     })
 
     it('searches indexed logs', async () => {

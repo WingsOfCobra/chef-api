@@ -67,7 +67,35 @@ function parseServiceBlocks(output: string, serviceNames: string[]): ServiceStat
 const servicesRoutes: FastifyPluginAsync = async (fastify) => {
   // GET /services/status
   // Cached for 10s - systemctl queries can be slow via SSH
-  fastify.get('/status', { schema: { tags: ['Services'] } }, async () => {
+  fastify.get('/status', {
+    schema: {
+      tags: ['Services'],
+      summary: 'Get monitored service statuses',
+      description: 'Returns the status of all monitored systemd services configured via MONITORED_SERVICES env var. Queries via SSH.',
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            services: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  name: { type: 'string' },
+                  active: { type: 'boolean' },
+                  status: { type: 'string' },
+                  uptime: { type: ['string', 'null'] },
+                  memory: { type: ['string', 'null'] },
+                  pid: { type: ['number', 'null'] },
+                },
+              },
+            },
+            timestamp: { type: 'string' },
+          },
+        },
+      },
+    },
+  }, async () => {
     const cacheKey = 'services:status'
     const cached = fastify.cache.get(cacheKey)
     if (cached) return cached

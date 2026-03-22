@@ -1,9 +1,40 @@
 import { FastifyPluginAsync } from 'fastify'
 import * as docker from '../services/docker.service'
 
+const errorResponse = {
+  type: 'object',
+  properties: {
+    error: { type: 'string' },
+  },
+} as const
+
 const dockerRoutes: FastifyPluginAsync = async (fastify) => {
   // GET /docker/containers
-  fastify.get('/containers', { schema: { tags: ['Docker'] } }, async () => {
+  fastify.get('/containers', {
+    schema: {
+      tags: ['Docker'],
+      summary: 'List all Docker containers',
+      description: 'Returns all containers (running, stopped, paused) with their status, health, ports, and uptime.',
+      response: {
+        200: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              name: { type: 'string' },
+              image: { type: 'string' },
+              status: { type: 'string' },
+              state: { type: 'string' },
+              health: { type: ['string', 'null'] },
+              uptime: { type: 'string' },
+              ports: { type: 'array', items: { type: 'string' } },
+            },
+          },
+        },
+      },
+    },
+  }, async () => {
     const cacheKey = 'docker:containers'
     const cached = fastify.cache.get(cacheKey)
     if (cached) return cached
@@ -16,7 +47,21 @@ const dockerRoutes: FastifyPluginAsync = async (fastify) => {
   // POST /docker/containers/:id/restart
   fastify.post<{ Params: { id: string } }>(
     '/containers/:id/restart',
-    { schema: { tags: ['Docker'] } },
+    {
+      schema: {
+        tags: ['Docker'],
+        summary: 'Restart a container',
+        description: 'Restarts the specified container by ID or name.',
+        params: {
+          type: 'object',
+          properties: { id: { type: 'string' } },
+          required: ['id'],
+        },
+        response: {
+          204: { type: 'null', description: 'Container restarted successfully' },
+        },
+      },
+    },
     async (request, reply) => {
       const { id } = request.params
       await docker.restartContainer(id)
@@ -28,7 +73,21 @@ const dockerRoutes: FastifyPluginAsync = async (fastify) => {
   // POST /docker/containers/:id/stop
   fastify.post<{ Params: { id: string } }>(
     '/containers/:id/stop',
-    { schema: { tags: ['Docker'] } },
+    {
+      schema: {
+        tags: ['Docker'],
+        summary: 'Stop a container',
+        description: 'Stops the specified container by ID or name.',
+        params: {
+          type: 'object',
+          properties: { id: { type: 'string' } },
+          required: ['id'],
+        },
+        response: {
+          204: { type: 'null', description: 'Container stopped successfully' },
+        },
+      },
+    },
     async (request, reply) => {
       const { id } = request.params
       await docker.stopContainer(id)
@@ -40,7 +99,32 @@ const dockerRoutes: FastifyPluginAsync = async (fastify) => {
   // GET /docker/containers/:id/logs
   fastify.get<{ Params: { id: string } }>(
     '/containers/:id/logs',
-    { schema: { tags: ['Docker'] } },
+    {
+      schema: {
+        tags: ['Docker'],
+        summary: 'Get container logs',
+        description: 'Returns the last N lines of logs for a container. Accepts optional "lines" query parameter (default 100).',
+        params: {
+          type: 'object',
+          properties: { id: { type: 'string' } },
+          required: ['id'],
+        },
+        querystring: {
+          type: 'object',
+          properties: { lines: { type: 'string' } },
+        },
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              lines: { type: 'number' },
+              logs: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
     async (request) => {
       const { id } = request.params
       const query = request.query as { lines?: string }
@@ -70,7 +154,36 @@ const dockerRoutes: FastifyPluginAsync = async (fastify) => {
   // GET /docker/containers/:id/stats
   fastify.get<{ Params: { id: string } }>(
     '/containers/:id/stats',
-    { schema: { tags: ['Docker'] } },
+    {
+      schema: {
+        tags: ['Docker'],
+        summary: 'Get per-container resource stats',
+        description: 'Returns CPU, memory, network, and block I/O stats for a single container. Not cached — intended for frequent polling.',
+        params: {
+          type: 'object',
+          properties: { id: { type: 'string' } },
+          required: ['id'],
+        },
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              name: { type: 'string' },
+              cpu_percent: { type: 'number' },
+              memory_usage: { type: 'number' },
+              memory_limit: { type: 'number' },
+              memory_percent: { type: 'number' },
+              network_rx: { type: 'number' },
+              network_tx: { type: 'number' },
+              block_read: { type: 'number' },
+              block_write: { type: 'number' },
+              timestamp: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
     async (request) => {
       const { id } = request.params
       return await docker.getContainerStats(id)
@@ -79,7 +192,40 @@ const dockerRoutes: FastifyPluginAsync = async (fastify) => {
 
   // GET /docker/stats
   // Cached for 5s - Docker stats are expensive to compute
-  fastify.get('/stats', { schema: { tags: ['Docker'] } }, async () => {
+  fastify.get('/stats', {
+    schema: {
+      tags: ['Docker'],
+      summary: 'Get overall Docker resource usage',
+      description: 'Returns aggregate Docker stats including container counts, image/volume counts, and disk usage breakdown.',
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            containers: {
+              type: 'object',
+              properties: {
+                total: { type: 'number' },
+                running: { type: 'number' },
+                stopped: { type: 'number' },
+                paused: { type: 'number' },
+              },
+            },
+            images: { type: 'number' },
+            volumes: { type: 'number' },
+            diskUsage: {
+              type: 'object',
+              properties: {
+                images: { type: 'string' },
+                containers: { type: 'string' },
+                volumes: { type: 'string' },
+                buildCache: { type: 'string' },
+              },
+            },
+          },
+        },
+      },
+    },
+  }, async () => {
     const cacheKey = 'docker:stats'
     const cached = fastify.cache.get(cacheKey)
     if (cached) return cached
