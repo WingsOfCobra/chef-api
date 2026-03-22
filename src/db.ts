@@ -109,12 +109,35 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_alert_events_rule_id ON alert_events(rule_id);
   CREATE INDEX IF NOT EXISTS idx_alert_events_triggered_at ON alert_events(triggered_at);
 
+  CREATE TABLE IF NOT EXISTS ansible_jobs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    playbook TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','running','success','failed','cancelled')),
+    output TEXT,
+    exit_code INTEGER,
+    started_at TEXT,
+    finished_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
   CREATE TABLE IF NOT EXISTS log_sources (
     name TEXT PRIMARY KEY,
     type TEXT NOT NULL CHECK(type IN ('file', 'journald', 'docker')),
     path TEXT,
     last_indexed_at TEXT,
     last_offset INTEGER DEFAULT 0
+  );
+
+  CREATE TABLE IF NOT EXISTS fleet_servers (
+    name TEXT PRIMARY KEY,
+    host TEXT NOT NULL,
+    user TEXT NOT NULL,
+    ssh_host TEXT NOT NULL,
+    tags TEXT,
+    last_seen TEXT,
+    os_info TEXT,
+    status TEXT NOT NULL DEFAULT 'unknown',
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 `)
 
@@ -202,6 +225,17 @@ export interface LogSearchResult {
   rank: number
 }
 
+export interface AnsibleJob {
+  id: number
+  playbook: string
+  status: 'pending' | 'running' | 'success' | 'failed' | 'cancelled'
+  output: string | null
+  exit_code: number | null
+  started_at: string | null
+  finished_at: string | null
+  created_at: string
+}
+
 export interface AlertRule {
   id: number
   name: string
@@ -212,6 +246,18 @@ export interface AlertRule {
   enabled: number
   created_at: string
   updated_at: string
+}
+
+export interface FleetServer {
+  name: string
+  host: string
+  user: string
+  ssh_host: string
+  tags: string | null
+  last_seen: string | null
+  os_info: string | null
+  status: string
+  created_at: string
 }
 
 export interface AlertEvent {

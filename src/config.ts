@@ -78,6 +78,8 @@ const envSchema = z.object({
   EMAIL_CACHE_TTL_SECONDS: z.coerce.number().default(300),
   BW_SESSION: z.string().default(''),
   BW_CLI_PATH: z.string().default('bw'),
+  ANSIBLE_PLAYBOOK_DIR: z.string().default(''),
+  ANSIBLE_INVENTORY: z.string().default(''),
 })
 
 const parsed = envSchema.safeParse(process.env)
@@ -117,6 +119,8 @@ export const config = {
   emailCacheTtlSeconds: env.EMAIL_CACHE_TTL_SECONDS,
   bwSession: env.BW_SESSION,
   bwCliPath: env.BW_CLI_PATH,
+  ansiblePlaybookDir: env.ANSIBLE_PLAYBOOK_DIR,
+  ansibleInventory: env.ANSIBLE_INVENTORY,
 }
 
 export type Config = typeof config
