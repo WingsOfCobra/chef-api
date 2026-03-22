@@ -2,9 +2,98 @@ import { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 import * as github from '../services/github.service'
 
+const repoSchema = {
+  type: 'object',
+  properties: {
+    name: { type: 'string' },
+    fullName: { type: 'string' },
+    description: { type: ['string', 'null'] },
+    stars: { type: 'number' },
+    lastPush: { type: 'string' },
+    openIssues: { type: 'number' },
+    url: { type: 'string' },
+    private: { type: 'boolean' },
+  },
+} as const
+
+const prSchema = {
+  type: 'object',
+  properties: {
+    number: { type: 'number' },
+    title: { type: 'string' },
+    author: { type: 'string' },
+    createdAt: { type: 'string' },
+    updatedAt: { type: 'string' },
+    url: { type: 'string' },
+    draft: { type: 'boolean' },
+    ciStatus: { type: ['string', 'null'] },
+  },
+} as const
+
+const issueSchema = {
+  type: 'object',
+  properties: {
+    number: { type: 'number' },
+    title: { type: 'string' },
+    author: { type: 'string' },
+    createdAt: { type: 'string' },
+    labels: { type: 'array', items: { type: 'string' } },
+    url: { type: 'string' },
+    state: { type: 'string' },
+  },
+} as const
+
+const workflowRunSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'number' },
+    name: { type: 'string' },
+    status: { type: ['string', 'null'] },
+    conclusion: { type: ['string', 'null'] },
+    createdAt: { type: 'string' },
+    url: { type: 'string' },
+    branch: { type: 'string' },
+  },
+} as const
+
+const notificationSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string' },
+    reason: { type: 'string' },
+    title: { type: 'string' },
+    type: { type: 'string' },
+    repo: { type: 'string' },
+    url: { type: 'string' },
+    updatedAt: { type: 'string' },
+  },
+} as const
+
+const ownerRepoParams = {
+  type: 'object',
+  properties: {
+    owner: { type: 'string' },
+    repo: { type: 'string' },
+  },
+  required: ['owner', 'repo'],
+} as const
+
 const githubRoutes: FastifyPluginAsync = async (fastify) => {
   // GET /github/repos
-  fastify.get('/repos', { schema: { tags: ['GitHub'] } }, async (request, reply) => {
+  fastify.get('/repos', {
+    schema: {
+      tags: ['GitHub'],
+      summary: 'List GitHub repositories',
+      description: 'Returns repositories for the authenticated user, or for a specific org if the "org" query parameter is provided.',
+      querystring: {
+        type: 'object',
+        properties: { org: { type: 'string' } },
+      },
+      response: {
+        200: { type: 'array', items: repoSchema },
+      },
+    },
+  }, async (request, reply) => {
     const query = request.query as { org?: string }
     const cacheKey = `github:repos:${query.org ?? 'me'}`
 
@@ -19,7 +108,17 @@ const githubRoutes: FastifyPluginAsync = async (fastify) => {
   // GET /github/repos/:owner/:repo/prs
   fastify.get<{ Params: { owner: string; repo: string } }>(
     '/repos/:owner/:repo/prs',
-    { schema: { tags: ['GitHub'] } },
+    {
+      schema: {
+        tags: ['GitHub'],
+        summary: 'List open pull requests',
+        description: 'Returns open pull requests for the specified repository, including CI status.',
+        params: ownerRepoParams,
+        response: {
+          200: { type: 'array', items: prSchema },
+        },
+      },
+    },
     async (request) => {
       const { owner, repo } = request.params
       const cacheKey = `github:prs:${owner}/${repo}`
@@ -36,7 +135,17 @@ const githubRoutes: FastifyPluginAsync = async (fastify) => {
   // GET /github/repos/:owner/:repo/issues
   fastify.get<{ Params: { owner: string; repo: string } }>(
     '/repos/:owner/:repo/issues',
-    { schema: { tags: ['GitHub'] } },
+    {
+      schema: {
+        tags: ['GitHub'],
+        summary: 'List open issues',
+        description: 'Returns open issues (excluding pull requests) for the specified repository.',
+        params: ownerRepoParams,
+        response: {
+          200: { type: 'array', items: issueSchema },
+        },
+      },
+    },
     async (request) => {
       const { owner, repo } = request.params
       const cacheKey = `github:issues:${owner}/${repo}`
@@ -59,7 +168,17 @@ const githubRoutes: FastifyPluginAsync = async (fastify) => {
 
   fastify.post<{ Params: { owner: string; repo: string } }>(
     '/repos/:owner/:repo/issues',
-    { schema: { tags: ['GitHub'] } },
+    {
+      schema: {
+        tags: ['GitHub'],
+        summary: 'Create a new issue',
+        description: 'Creates a new issue in the specified repository with an optional body and labels.',
+        params: ownerRepoParams,
+        response: {
+          201: issueSchema,
+        },
+      },
+    },
     async (request, reply) => {
       const { owner, repo } = request.params
       const body = createIssueSchema.parse(request.body)
@@ -77,7 +196,17 @@ const githubRoutes: FastifyPluginAsync = async (fastify) => {
   // GET /github/repos/:owner/:repo/workflows
   fastify.get<{ Params: { owner: string; repo: string } }>(
     '/repos/:owner/:repo/workflows',
-    { schema: { tags: ['GitHub'] } },
+    {
+      schema: {
+        tags: ['GitHub'],
+        summary: 'List recent workflow runs',
+        description: 'Returns recent GitHub Actions workflow runs for the specified repository.',
+        params: ownerRepoParams,
+        response: {
+          200: { type: 'array', items: workflowRunSchema },
+        },
+      },
+    },
     async (request) => {
       const { owner, repo } = request.params
       const cacheKey = `github:workflows:${owner}/${repo}`
@@ -93,7 +222,16 @@ const githubRoutes: FastifyPluginAsync = async (fastify) => {
 
   // GET /github/notifications
   // Cached for 30s with timeout protection against slow GitHub API
-  fastify.get('/notifications', { schema: { tags: ['GitHub'] } }, async (request) => {
+  fastify.get('/notifications', {
+    schema: {
+      tags: ['GitHub'],
+      summary: 'List unread notifications',
+      description: 'Returns unread GitHub notifications for the authenticated user. Uses a 500ms timeout with stale-cache fallback.',
+      response: {
+        200: { type: 'array', items: notificationSchema },
+      },
+    },
+  }, async (request) => {
     const cacheKey = 'github:notifications'
 
     const cached = fastify.cache.get(cacheKey)
@@ -104,12 +242,12 @@ const githubRoutes: FastifyPluginAsync = async (fastify) => {
       const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => reject(new Error('GitHub API timeout')), 500)
       )
-      
+
       const notifications = await Promise.race([
         github.listNotifications(),
         timeoutPromise
       ]) as Awaited<ReturnType<typeof github.listNotifications>>
-      
+
       fastify.cache.set(cacheKey, notifications, 30) // Reduced to 30s
       return notifications
     } catch (err) {

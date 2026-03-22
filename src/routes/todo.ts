@@ -28,9 +28,54 @@ function parseTodoMd(): Array<{ id: number; title: string; completed: boolean; s
   }
 }
 
+const todoItemSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'number' },
+    title: { type: 'string' },
+    description: { type: ['string', 'null'] },
+    completed: { type: 'number' },
+    created_at: { type: 'string' },
+    updated_at: { type: 'string' },
+  },
+} as const
+
+const fileTodoSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'number' },
+    title: { type: 'string' },
+    completed: { type: 'boolean' },
+    source: { type: 'string' },
+  },
+} as const
+
+const errorResponse = {
+  type: 'object',
+  properties: {
+    error: { type: 'string' },
+  },
+} as const
+
 const todoRoutes: FastifyPluginAsync = async (fastify) => {
   // GET /todo
-  fastify.get('/', { schema: { tags: ['Todos'] } }, async () => {
+  fastify.get('/', {
+    schema: {
+      tags: ['Todos'],
+      summary: 'List all todos',
+      description: 'Returns all todos from the database and from the TODO.md file, with a total count.',
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            db: { type: 'array', items: todoItemSchema },
+            file: { type: 'array', items: fileTodoSchema },
+            total: { type: 'number' },
+          },
+        },
+      },
+    },
+  }, async () => {
     const dbItems = db.prepare('SELECT * FROM todos ORDER BY created_at DESC').all() as Todo[]
     const fileItems = parseTodoMd()
     return {
@@ -46,7 +91,16 @@ const todoRoutes: FastifyPluginAsync = async (fastify) => {
     description: z.string().optional(),
   })
 
-  fastify.post('/', { schema: { tags: ['Todos'] } }, async (request, reply) => {
+  fastify.post('/', {
+    schema: {
+      tags: ['Todos'],
+      summary: 'Create a new todo',
+      description: 'Creates a new todo in the database with a title and optional description.',
+      response: {
+        201: todoItemSchema,
+      },
+    },
+  }, async (request, reply) => {
     const body = createSchema.parse(request.body)
 
     const result = db
@@ -66,7 +120,22 @@ const todoRoutes: FastifyPluginAsync = async (fastify) => {
     completed: z.boolean().optional(),
   })
 
-  fastify.patch<{ Params: { id: string } }>('/:id', { schema: { tags: ['Todos'] } }, async (request, reply) => {
+  fastify.patch<{ Params: { id: string } }>('/:id', {
+    schema: {
+      tags: ['Todos'],
+      summary: 'Update a todo',
+      description: 'Updates an existing todo by ID. Supports partial updates for title, description, and completed status.',
+      params: {
+        type: 'object',
+        properties: { id: { type: 'string' } },
+        required: ['id'],
+      },
+      response: {
+        200: todoItemSchema,
+        404: errorResponse,
+      },
+    },
+  }, async (request, reply) => {
     const id = parseInt(request.params.id, 10)
     const body = updateSchema.parse(request.body)
 
@@ -96,7 +165,22 @@ const todoRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   // DELETE /todo/:id
-  fastify.delete<{ Params: { id: string } }>('/:id', { schema: { tags: ['Todos'] } }, async (request, reply) => {
+  fastify.delete<{ Params: { id: string } }>('/:id', {
+    schema: {
+      tags: ['Todos'],
+      summary: 'Delete a todo',
+      description: 'Deletes a todo by ID. Only works for database todos (id < 10000), not file-based todos.',
+      params: {
+        type: 'object',
+        properties: { id: { type: 'string' } },
+        required: ['id'],
+      },
+      response: {
+        204: { type: 'null', description: 'Todo deleted successfully' },
+        404: errorResponse,
+      },
+    },
+  }, async (request, reply) => {
     const id = parseInt(request.params.id, 10)
 
     const existing = db.prepare('SELECT * FROM todos WHERE id = ?').get(id) as Todo | undefined
