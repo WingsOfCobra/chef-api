@@ -76,6 +76,8 @@ const envSchema = z.object({
   IMAP_PASS: z.string().default(''),
   IMAP_TLS: z.string().default('true').transform((v) => v === 'true'),
   EMAIL_CACHE_TTL_SECONDS: z.coerce.number().default(300),
+  BW_SESSION: z.string().default(''),
+  BW_CLI_PATH: z.string().default('bw'),
 })
 
 const parsed = envSchema.safeParse(process.env)
@@ -113,6 +115,8 @@ export const config = {
   imapPass: env.IMAP_PASS,
   imapTls: env.IMAP_TLS,
   emailCacheTtlSeconds: env.EMAIL_CACHE_TTL_SECONDS,
+  bwSession: env.BW_SESSION,
+  bwCliPath: env.BW_CLI_PATH,
 }
 
 export type Config = typeof config
