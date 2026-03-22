@@ -1,6 +1,7 @@
 import Fastify from 'fastify'
 import swagger from '@fastify/swagger'
 import swaggerUi from '@fastify/swagger-ui'
+import websocket from '@fastify/websocket'
 import { config } from './config'
 import authPlugin from './plugins/auth'
 import cachePlugin from './plugins/cache'
@@ -14,9 +15,12 @@ import hooksRoutes from './routes/hooks'
 import logsRoutes from './routes/logs'
 import emailRoutes from './routes/email'
 import servicesRoutes from './routes/services'
+import alertsRoutes from './routes/alerts'
 import { initScheduler } from './services/cron-scheduler'
 import { cleanupOldEvents } from './services/hooks.service'
+import { startAlertChecker } from './services/alert-checker'
 import { initLogSources, runIndexCycle } from './services/logs.service'
+import wsRoutes from './routes/ws'
 
 async function build() {
   const fastify = Fastify({
@@ -59,6 +63,7 @@ async function build() {
         { name: 'Logs', description: 'Log file search and aggregation' },
         { name: 'Email', description: 'Email monitoring and retrieval' },
         { name: 'Services', description: 'Systemd service monitoring' },
+        { name: 'Alerts', description: 'Alert rules and webhook notifications' },
       ],
     },
   })
@@ -72,6 +77,7 @@ async function build() {
   })
 
   // Plugins
+  await fastify.register(websocket)
   await fastify.register(cachePlugin)
   await fastify.register(authPlugin)
 
@@ -86,6 +92,8 @@ async function build() {
   await fastify.register(logsRoutes, { prefix: '/logs' })
   await fastify.register(emailRoutes, { prefix: '/email' })
   await fastify.register(servicesRoutes, { prefix: '/services' })
+  await fastify.register(alertsRoutes, { prefix: '/alerts' })
+  await fastify.register(wsRoutes, { prefix: '/ws' })
 
   return fastify
 }
@@ -108,6 +116,9 @@ async function main() {
       setInterval(() => runIndexCycle(), config.logIndexIntervalSeconds * 1000)
     }
     
+    // Start alert checker (every 60s)
+    startAlertChecker(fastify)
+
     // Clean up expired hook events every 6 hours
     setInterval(() => cleanupOldEvents(), 6 * 60 * 60 * 1000)
     

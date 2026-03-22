@@ -84,6 +84,31 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_hook_events_type ON hook_events(event_type);
   CREATE INDEX IF NOT EXISTS idx_hook_events_created_at ON hook_events(created_at);
 
+  CREATE TABLE IF NOT EXISTS alert_rules (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL CHECK(type IN ('container_stopped','disk_usage','memory_usage','cron_failure','github_ci_failure')),
+    target TEXT,
+    threshold REAL,
+    webhook_url TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS alert_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    rule_id INTEGER NOT NULL REFERENCES alert_rules(id) ON DELETE CASCADE,
+    triggered_at TEXT NOT NULL DEFAULT (datetime('now')),
+    payload TEXT,
+    delivered INTEGER NOT NULL DEFAULT 0,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_alert_events_rule_id ON alert_events(rule_id);
+  CREATE INDEX IF NOT EXISTS idx_alert_events_triggered_at ON alert_events(triggered_at);
+
   CREATE TABLE IF NOT EXISTS log_sources (
     name TEXT PRIMARY KEY,
     type TEXT NOT NULL CHECK(type IN ('file', 'journald', 'docker')),
@@ -175,4 +200,26 @@ export interface LogSearchResult {
   line: string
   timestamp: string
   rank: number
+}
+
+export interface AlertRule {
+  id: number
+  name: string
+  type: 'container_stopped' | 'disk_usage' | 'memory_usage' | 'cron_failure' | 'github_ci_failure'
+  target: string | null
+  threshold: number | null
+  webhook_url: string
+  enabled: number
+  created_at: string
+  updated_at: string
+}
+
+export interface AlertEvent {
+  id: number
+  rule_id: number
+  triggered_at: string
+  payload: string | null
+  delivered: number
+  attempts: number
+  last_error: string | null
 }
