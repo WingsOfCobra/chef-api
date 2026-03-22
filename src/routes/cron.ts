@@ -109,6 +109,28 @@ const cronRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get('/presets', { schema: { tags: ['Cron'] } }, async () => {
     return cronService.getPresets()
   })
+
+  // GET /cron/health — scheduler health check
+  fastify.get('/health', { schema: { tags: ['Cron'] } }, async () => {
+    const jobs = cronService.listJobs()
+    return {
+      schedulerActive: true,
+      scheduledJobs: scheduler.getScheduledCount(),
+      totalJobs: jobs.length,
+      enabledJobs: jobs.filter(j => j.enabled).length,
+      disabledJobs: jobs.filter(j => !j.enabled).length,
+      jobs: jobs.map(j => ({
+        id: j.id,
+        name: j.name,
+        enabled: j.enabled,
+        schedule: j.schedule,
+        type: j.type,
+        nextRun: j.enabled ? scheduler.getNextRun(j.id)?.toISOString() ?? null : null,
+        lastRun: j.last_run_at,
+        lastStatus: j.last_run_status,
+      })),
+    }
+  })
 }
 
 export default cronRoutes

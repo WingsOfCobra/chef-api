@@ -95,14 +95,22 @@ async function main() {
 
   try {
     await fastify.listen({ port: config.port, host: config.host })
-    initScheduler()
+    
+    // Initialize cron scheduler with logger
+    initScheduler(fastify.log)
+    const scheduledCount = require('./services/cron-scheduler').getScheduledCount()
+    fastify.log.info({ scheduledJobs: scheduledCount }, '✓ Cron scheduler initialized')
+    
+    // Initialize log sources
     initLogSources()
-    // Index log sources periodically
     if (config.logSources.length > 0) {
+      fastify.log.info({ sources: config.logSources.length, intervalSeconds: config.logIndexIntervalSeconds }, 'Log indexing enabled')
       setInterval(() => runIndexCycle(), config.logIndexIntervalSeconds * 1000)
     }
+    
     // Clean up expired hook events every 6 hours
     setInterval(() => cleanupOldEvents(), 6 * 60 * 60 * 1000)
+    
     fastify.log.info(`🍳 Chef API running at http://${config.host}:${config.port}`)
     fastify.log.info(`📚 Swagger docs at http://${config.host}:${config.port}/docs`)
   } catch (err) {

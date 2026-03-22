@@ -62,13 +62,14 @@ const dockerRoutes: FastifyPluginAsync = async (fastify) => {
   )
 
   // GET /docker/stats
+  // Cached for 5s - Docker stats are expensive to compute
   fastify.get('/stats', { schema: { tags: ['Docker'] } }, async () => {
     const cacheKey = 'docker:stats'
     const cached = fastify.cache.get(cacheKey)
     if (cached) return cached
 
     const stats = await docker.getDockerStats()
-    fastify.cache.set(cacheKey, stats, 10)
+    fastify.cache.set(cacheKey, stats, 5) // Reduced to 5s for better performance
     return stats
   })
 }

@@ -92,15 +92,35 @@ const githubRoutes: FastifyPluginAsync = async (fastify) => {
   )
 
   // GET /github/notifications
+  // Cached for 30s with timeout protection against slow GitHub API
   fastify.get('/notifications', { schema: { tags: ['GitHub'] } }, async (request) => {
     const cacheKey = 'github:notifications'
 
     const cached = fastify.cache.get(cacheKey)
     if (cached) return cached
 
-    const notifications = await github.listNotifications()
-    fastify.cache.set(cacheKey, notifications, 60)
-    return notifications
+    try {
+      // Race between the API call and a 500ms timeout
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('GitHub API timeout')), 500)
+      )
+      
+      const notifications = await Promise.race([
+        github.listNotifications(),
+        timeoutPromise
+      ]) as Awaited<ReturnType<typeof github.listNotifications>>
+      
+      fastify.cache.set(cacheKey, notifications, 30) // Reduced to 30s
+      return notifications
+    } catch (err) {
+      // Return stale cache if available, otherwise throw
+      const staleCache = fastify.cache.get(cacheKey)
+      if (staleCache) {
+        fastify.log.warn('GitHub API slow/timeout, returning stale cache')
+        return staleCache
+      }
+      throw err
+    }
   })
 }
 
