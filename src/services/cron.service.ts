@@ -126,9 +126,18 @@ export async function executeJob(job: CronJob): Promise<CronHistory> {
       }
       const isLocal = !jobConfig.host || jobConfig.host === 'localhost' || jobConfig.host === '127.0.0.1'
       if (isLocal) {
-        const cmd = (jobConfig.command ?? '').replace(/\/home\/anian\/.openclaw\/workspace\//g, '/workspace/')
+        // Remap workspace path and replace `bash` with `sh` (Alpine has no bash)
+        let cmd = (jobConfig.command ?? '')
+          .replace(/\/home\/anian\/.openclaw\/workspace\//g, '/workspace/')
+          .replace(/^bash /, 'sh ')
+          .replace(/ && bash /g, ' && sh ')
+          .replace(/; bash /g, '; sh ')
+        // If command is a direct script invocation (no shell prefix), prefix with sh
+        if (cmd.startsWith('/') && !cmd.startsWith('sh ') && !cmd.startsWith('/bin/sh')) {
+          cmd = `sh ${cmd}`
+        }
         try {
-          const result = await execAsync(cmd, { timeout: 60000 })
+          const result = await execAsync(cmd, { timeout: 60000, shell: '/bin/sh' })
           stdout = result.stdout
           stderr = result.stderr
           exitCode = 0
