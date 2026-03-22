@@ -28,7 +28,8 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
     if (
       request.url.startsWith('/docs') ||
       request.url === '/system/health' ||
-      request.url === '/hooks/agent-event'
+      request.url === '/hooks/agent-event' ||
+      request.url.startsWith('/ws/')
     ) {
       return
     }
