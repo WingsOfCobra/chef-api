@@ -17,6 +17,7 @@ import emailRoutes from './routes/email'
 import servicesRoutes from './routes/services'
 import alertsRoutes from './routes/alerts'
 import fleetRoutes from './routes/fleet'
+import metricsRoutes from './routes/metrics'
 import { initScheduler } from './services/cron-scheduler'
 import { cleanupOldEvents } from './services/hooks.service'
 import { startAlertChecker } from './services/alert-checker'
@@ -66,6 +67,7 @@ async function build() {
         { name: 'Services', description: 'Systemd service monitoring' },
         { name: 'Alerts', description: 'Alert rules and webhook notifications' },
         { name: 'Fleet', description: 'Multi-server fleet management and monitoring' },
+        { name: 'Metrics', description: 'Prometheus and JSON system metrics' },
       ],
     },
   })
@@ -96,6 +98,7 @@ async function build() {
   await fastify.register(servicesRoutes, { prefix: '/services' })
   await fastify.register(alertsRoutes, { prefix: '/alerts' })
   await fastify.register(fleetRoutes, { prefix: '/fleet' })
+  await fastify.register(metricsRoutes, { prefix: '/metrics' })
   await fastify.register(wsRoutes, { prefix: '/ws' })
 
   return fastify
