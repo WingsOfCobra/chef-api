@@ -35,7 +35,6 @@ export function addToScheduler(job: CronJob): void {
       const result = await cronService.executeJob(current)
       const duration = Date.now() - startTime
       
-      // Log the full output for Loki
       if (result.stdout) {
         logger.info({
           jobId: job.id,
