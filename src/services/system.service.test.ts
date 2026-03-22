@@ -19,6 +19,15 @@ vi.mock('os', () => ({
       { model: 'Test CPU', speed: 3000 },
       { model: 'Test CPU', speed: 3000 },
     ]),
+    networkInterfaces: vi.fn(() => ({
+      eth0: [
+        { family: 'IPv4', address: '192.168.1.100', internal: false },
+        { family: 'IPv6', address: 'fe80::1', internal: false },
+      ],
+      wlan0: [
+        { family: 'IPv4', address: '10.0.0.5', internal: false },
+      ],
+    })),
   },
 }))
 
@@ -41,6 +50,17 @@ vi.mock('fs', async (importOriginal) => {
  face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed
     lo: 1000 10 0 0 0 0 0 0 1000 10 0 0 0 0 0 0
   eth0: 5000 50 0 0 0 0 0 0 3000 30 0 0 0 0 0 0
+ wlan0: 2000 20 0 0 0 0 0 0 1500 15 0 0 0 0 0 0
+`
+      }
+      if (path === '/proc/meminfo') {
+        return `MemTotal:       16384000 kB
+MemFree:         4096000 kB
+MemAvailable:    8192000 kB
+Buffers:          512000 kB
+Cached:          2048000 kB
+SwapTotal:       4096000 kB
+SwapFree:        3072000 kB
 `
       }
       return actual.readFileSync(path, encoding as BufferEncoding)
@@ -48,7 +68,10 @@ vi.mock('fs', async (importOriginal) => {
   }
 })
 
-import { getHealth, getDiskUsage, getTopProcesses } from './system.service'
+import { getHealth, getDiskUsage, getTopProcesses, getMemoryDetail, getNetworkInterfaces } from './system.service'
+import { readFileSync } from 'fs'
+
+const mockReadFileSync = vi.mocked(readFileSync)
 
 const mockExecSync = vi.mocked(execSync)
 
@@ -173,6 +196,143 @@ www-data     123  1.2  0.3 525632 52124 ?        Sl   Mar18   0:10 nginx: worker
 
       const procs = getTopProcesses()
       expect(procs).toEqual([])
+    })
+  })
+
+  describe('getMemoryDetail', () => {
+    it('parses /proc/meminfo correctly', () => {
+      const mem = getMemoryDetail()
+
+      expect(mem.total).toBe(16384000 * 1024)
+      expect(mem.free).toBe(4096000 * 1024)
+      expect(mem.available).toBe(8192000 * 1024)
+      expect(mem.buffers).toBe(512000 * 1024)
+      expect(mem.cached).toBe(2048000 * 1024)
+      expect(mem.swapTotal).toBe(4096000 * 1024)
+      expect(mem.swapFree).toBe(3072000 * 1024)
+      expect(mem.swapUsed).toBe((4096000 - 3072000) * 1024)
+    })
+
+    it('calculates usedPercent from total and available', () => {
+      const mem = getMemoryDetail()
+      // (total - available) / total * 100 = (16384000 - 8192000) / 16384000 * 100 = 50%
+      expect(mem.usedPercent).toBe(50)
+    })
+
+    it('calculates swapUsedPercent correctly', () => {
+      const mem = getMemoryDetail()
+      // (4096000 - 3072000) / 4096000 * 100 = 25%
+      expect(mem.swapUsedPercent).toBe(25)
+    })
+
+    it('handles missing swap lines gracefully', () => {
+      mockReadFileSync.mockImplementation((path: string) => {
+        if (path === '/proc/meminfo') {
+          return `MemTotal:       16384000 kB
+MemFree:         4096000 kB
+MemAvailable:    8192000 kB
+Buffers:          512000 kB
+Cached:          2048000 kB
+`
+        }
+        // Re-delegate other paths to avoid breaking other tests
+        if (path === '/proc/stat') return 'cpu  1000 200 300 5000 100 50 30 20 0 0\n'
+        if (path === '/proc/net/dev') return 'Inter-|\n face |\n'
+        return ''
+      })
+
+      const mem = getMemoryDetail()
+      expect(mem.swapTotal).toBe(0)
+      expect(mem.swapFree).toBe(0)
+      expect(mem.swapUsed).toBe(0)
+      expect(mem.swapUsedPercent).toBe(0)
+    })
+
+    it('returns zeroed object on read error', () => {
+      mockReadFileSync.mockImplementation((path: string) => {
+        if (path === '/proc/meminfo') throw new Error('no such file')
+        if (path === '/proc/stat') return 'cpu  1000 200 300 5000 100 50 30 20 0 0\n'
+        if (path === '/proc/net/dev') return 'Inter-|\n face |\n'
+        return ''
+      })
+
+      const mem = getMemoryDetail()
+      expect(mem.total).toBe(0)
+      expect(mem.free).toBe(0)
+      expect(mem.usedPercent).toBe(0)
+    })
+  })
+
+  describe('getNetworkInterfaces', () => {
+    const procNetDev = `Inter-|   Receive                                                |  Transmit
+ face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed
+    lo: 1000 10 0 0 0 0 0 0 1000 10 0 0 0 0 0 0
+  eth0: 5000 50 0 0 0 0 0 0 3000 30 0 0 0 0 0 0
+ wlan0: 2000 20 0 0 0 0 0 0 1500 15 0 0 0 0 0 0
+`
+
+    beforeEach(() => {
+      // Restore default mock behavior for readFileSync since prior tests may have overridden it
+      mockReadFileSync.mockImplementation((path: string) => {
+        if (path === '/proc/stat') return 'cpu  1000 200 300 5000 100 50 30 20 0 0\n'
+        if (path === '/proc/net/dev') return procNetDev
+        if (path === '/proc/meminfo') return `MemTotal: 16384000 kB\nMemFree: 4096000 kB\nMemAvailable: 8192000 kB\nBuffers: 512000 kB\nCached: 2048000 kB\nSwapTotal: 4096000 kB\nSwapFree: 3072000 kB\n`
+        return ''
+      })
+    })
+
+    it('parses per-interface stats from /proc/net/dev', () => {
+      const ifaces = getNetworkInterfaces()
+
+      expect(ifaces).toHaveLength(2) // eth0 + wlan0, lo excluded
+      const eth0 = ifaces.find((i) => i.name === 'eth0')!
+      expect(eth0.rx_bytes).toBe(5000)
+      expect(eth0.tx_bytes).toBe(3000)
+      expect(eth0.rx_packets).toBe(50)
+      expect(eth0.tx_packets).toBe(30)
+    })
+
+    it('excludes loopback interface', () => {
+      const ifaces = getNetworkInterfaces()
+      expect(ifaces.find((i) => i.name === 'lo')).toBeUndefined()
+    })
+
+    it('attaches IP addresses from os.networkInterfaces()', () => {
+      const ifaces = getNetworkInterfaces()
+
+      const eth0 = ifaces.find((i) => i.name === 'eth0')!
+      expect(eth0.ipv4).toBe('192.168.1.100')
+      expect(eth0.ipv6).toBe('fe80::1')
+
+      const wlan0 = ifaces.find((i) => i.name === 'wlan0')!
+      expect(wlan0.ipv4).toBe('10.0.0.5')
+      expect(wlan0.ipv6).toBeNull() // no IPv6 configured for wlan0
+    })
+
+    it('handles interface with no IP info', async () => {
+      // wlan0 has /proc/net/dev entry but os.networkInterfaces() may not list it
+      const osModule = (await import('os')).default
+      vi.mocked(osModule.networkInterfaces).mockReturnValueOnce({
+        eth0: [{ family: 'IPv4', address: '192.168.1.100', internal: false } as any],
+      })
+
+      const ifaces = getNetworkInterfaces()
+      const wlan0 = ifaces.find((i) => i.name === 'wlan0')!
+      expect(wlan0.ipv4).toBeNull()
+      expect(wlan0.ipv6).toBeNull()
+      expect(wlan0.rx_bytes).toBe(2000) // bytes still parsed from /proc/net/dev
+    })
+
+    it('returns empty array on read error', () => {
+      mockReadFileSync.mockImplementation((path: string) => {
+        if (path === '/proc/net/dev') throw new Error('no such file')
+        if (path === '/proc/stat') return 'cpu  1000 200 300 5000 100 50 30 20 0 0\n'
+        if (path === '/proc/meminfo') return ''
+        return ''
+      })
+
+      const ifaces = getNetworkInterfaces()
+      expect(ifaces).toEqual([])
     })
   })
 })

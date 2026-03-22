@@ -19,6 +19,21 @@ const mockContainerStats = {
   timestamp: '2025-01-01T00:00:00.000Z',
 }
 
+const mockInspect = {
+  id: 'abc123def456', name: 'web', image: 'nginx:latest', created: '2025-01-01T00:00:00Z',
+  state: { status: 'running', running: true, startedAt: '2025-01-01T00:00:00Z', finishedAt: '' },
+  restartPolicy: 'always', mounts: [], networks: [{ name: 'bridge', ipAddress: '172.17.0.2', gateway: '172.17.0.1' }],
+  ports: [{ containerPort: 80, hostPort: 8080, protocol: 'tcp' }], env: ['NODE_ENV=production'],
+}
+
+const mockImages = [
+  { id: 'abcdef123456', tags: ['nginx:latest'], size: '150 MB', created: '2025-01-01T00:00:00.000Z' },
+]
+
+const mockNetworks = [
+  { id: 'net123456789', name: 'bridge', driver: 'bridge', scope: 'local', containers: 2 },
+]
+
 vi.mock('../services/docker.service', () => ({
   listContainers: vi.fn(async () => mockContainers),
   restartContainer: vi.fn(async () => {}),
@@ -26,6 +41,9 @@ vi.mock('../services/docker.service', () => ({
   getContainerLogs: vi.fn(async () => 'log line 1'),
   getContainerStats: vi.fn(async () => mockContainerStats),
   getDockerStats: vi.fn(async () => mockStats),
+  inspectContainer: vi.fn(async () => mockInspect),
+  listImages: vi.fn(async () => mockImages),
+  listNetworks: vi.fn(async () => mockNetworks),
 }))
 
 import dockerRoutes from './docker'
@@ -132,6 +150,60 @@ describe('docker routes', () => {
     })
     expect(res.statusCode).toBe(200)
     expect(res.json().containers.total).toBe(1)
+  })
+
+  it('GET /docker/containers/:id/inspect returns container detail', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/docker/containers/abc123/inspect',
+      headers: authHeaders(),
+    })
+    expect(res.statusCode).toBe(200)
+    expect(res.json().name).toBe('web')
+    expect(res.json().state.running).toBe(true)
+    expect(res.json().networks).toHaveLength(1)
+    expect(res.json().env).toEqual(['NODE_ENV=production'])
+    expect(vi.mocked(docker.inspectContainer)).toHaveBeenCalledWith('abc123')
+  })
+
+  it('GET /docker/containers/:id/inspect uses cache on second call', async () => {
+    await app.inject({ method: 'GET', url: '/docker/containers/abc123/inspect', headers: authHeaders() })
+    await app.inject({ method: 'GET', url: '/docker/containers/abc123/inspect', headers: authHeaders() })
+    expect(vi.mocked(docker.inspectContainer)).toHaveBeenCalledTimes(1)
+  })
+
+  it('GET /docker/images returns image list', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/docker/images',
+      headers: authHeaders(),
+    })
+    expect(res.statusCode).toBe(200)
+    expect(res.json()).toHaveLength(1)
+    expect(res.json()[0].tags).toEqual(['nginx:latest'])
+  })
+
+  it('GET /docker/images uses cache on second call', async () => {
+    await app.inject({ method: 'GET', url: '/docker/images', headers: authHeaders() })
+    await app.inject({ method: 'GET', url: '/docker/images', headers: authHeaders() })
+    expect(vi.mocked(docker.listImages)).toHaveBeenCalledTimes(1)
+  })
+
+  it('GET /docker/networks returns network list', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/docker/networks',
+      headers: authHeaders(),
+    })
+    expect(res.statusCode).toBe(200)
+    expect(res.json()).toHaveLength(1)
+    expect(res.json()[0].containers).toBe(2)
+  })
+
+  it('GET /docker/networks uses cache on second call', async () => {
+    await app.inject({ method: 'GET', url: '/docker/networks', headers: authHeaders() })
+    await app.inject({ method: 'GET', url: '/docker/networks', headers: authHeaders() })
+    expect(vi.mocked(docker.listNetworks)).toHaveBeenCalledTimes(1)
   })
 
   it('requires auth', async () => {

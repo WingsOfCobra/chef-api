@@ -37,6 +37,41 @@ export interface DockerStats {
   }
 }
 
+export interface ContainerInspect {
+  id: string
+  name: string
+  image: string
+  created: string
+  state: {
+    status: string
+    running: boolean
+    startedAt: string
+    finishedAt: string
+  }
+  restartPolicy: string
+  mounts: Array<{ type: string; source: string; destination: string; mode: string }>
+  networks: Array<{ name: string; ipAddress: string; gateway: string }>
+  ports: Array<{ containerPort: number; hostPort: number | null; protocol: string }>
+  env: string[]
+}
+
+export interface ImageSummary {
+  id: string
+  tags: string[]
+  size: string
+  created: string
+}
+
+export interface NetworkSummary {
+  id: string
+  name: string
+  driver: string
+  scope: string
+  containers: number
+}
+
+const SENSITIVE_ENV_PATTERN = /_(KEY|SECRET|TOKEN|PASSWORD|PASS)=/i
+
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B'
   const k = 1024
@@ -221,4 +256,91 @@ export async function getDockerStats(): Promise<DockerStats> {
       buildCache: formatBytes(cacheBytes),
     },
   }
+}
+
+export async function inspectContainer(id: string): Promise<ContainerInspect> {
+  const client = dockerClient()
+  const { data } = await client.get(`/containers/${id}/json`)
+
+  const name = (data.Name as string)?.replace(/^\//, '') ?? id
+
+  // Parse mounts
+  const mounts = ((data.Mounts as Array<{ Type: string; Source: string; Destination: string; Mode: string }>) ?? []).map((m) => ({
+    type: m.Type ?? '',
+    source: m.Source ?? '',
+    destination: m.Destination ?? '',
+    mode: m.Mode ?? '',
+  }))
+
+  // Parse networks
+  const networksObj = (data.NetworkSettings?.Networks as Record<string, { IPAddress: string; Gateway: string }>) ?? {}
+  const networks = Object.entries(networksObj).map(([netName, net]) => ({
+    name: netName,
+    ipAddress: net.IPAddress ?? '',
+    gateway: net.Gateway ?? '',
+  }))
+
+  // Parse ports from NetworkSettings.Ports
+  const portsObj = (data.NetworkSettings?.Ports as Record<string, Array<{ HostPort: string }> | null>) ?? {}
+  const ports: ContainerInspect['ports'] = []
+  for (const [key, bindings] of Object.entries(portsObj)) {
+    const match = key.match(/^(\d+)\/(\w+)$/)
+    if (!match) continue
+    const containerPort = parseInt(match[1], 10)
+    const protocol = match[2]
+    if (bindings && bindings.length > 0) {
+      for (const b of bindings) {
+        ports.push({ containerPort, hostPort: parseInt(b.HostPort, 10), protocol })
+      }
+    } else {
+      ports.push({ containerPort, hostPort: null, protocol })
+    }
+  }
+
+  // Filter sensitive env vars
+  const rawEnv = (data.Config?.Env as string[]) ?? []
+  const env = rawEnv.filter((e) => !SENSITIVE_ENV_PATTERN.test(e))
+
+  return {
+    id: (data.Id as string).substring(0, 12),
+    name,
+    image: data.Config?.Image ?? data.Image ?? '',
+    created: data.Created ?? '',
+    state: {
+      status: data.State?.Status ?? '',
+      running: data.State?.Running ?? false,
+      startedAt: data.State?.StartedAt ?? '',
+      finishedAt: data.State?.FinishedAt ?? '',
+    },
+    restartPolicy: data.HostConfig?.RestartPolicy?.Name ?? '',
+    mounts,
+    networks,
+    ports,
+    env,
+  }
+}
+
+export async function listImages(): Promise<ImageSummary[]> {
+  const client = dockerClient()
+  const { data } = await client.get('/images/json')
+
+  return (data as Array<{ Id: string; RepoTags: string[] | null; Size: number; Created: number }>).map((img) => ({
+    id: (img.Id ?? '').replace(/^sha256:/, '').substring(0, 12),
+    tags: img.RepoTags ?? [],
+    size: formatBytes(img.Size ?? 0),
+    created: new Date((img.Created ?? 0) * 1000).toISOString(),
+  }))
+}
+
+export async function listNetworks(): Promise<NetworkSummary[]> {
+  const client = dockerClient()
+  const { data } = await client.get('/networks')
+
+  return (data as Array<{ Id: string; Name: string; Driver: string; Scope: string; Containers: Record<string, unknown> | null }>).map((net) => ({
+    id: (net.Id ?? '').substring(0, 12),
+    name: net.Name ?? '',
+    driver: net.Driver ?? '',
+    scope: net.Scope ?? '',
+    containers: Object.keys(net.Containers ?? {}).length,
+  }))
 }

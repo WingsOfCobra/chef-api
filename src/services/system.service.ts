@@ -45,6 +45,29 @@ export interface HealthInfo {
   timestamp: string
 }
 
+export interface MemoryDetail {
+  total: number
+  free: number
+  available: number
+  buffers: number
+  cached: number
+  swapTotal: number
+  swapFree: number
+  swapUsed: number
+  usedPercent: number
+  swapUsedPercent: number
+}
+
+export interface NetworkInterface {
+  name: string
+  rx_bytes: number
+  tx_bytes: number
+  rx_packets: number
+  tx_packets: number
+  ipv4: string | null
+  ipv6: string | null
+}
+
 const startTime = Date.now()
 
 function formatBytes(bytes: number): string {
@@ -163,6 +186,75 @@ export function getDiskUsage(): DiskMount[] {
         }
       })
       .filter((m) => m.filesystem.startsWith('/') || m.filesystem.startsWith('tmpfs'))
+  } catch {
+    return []
+  }
+}
+
+export function getMemoryDetail(): MemoryDetail {
+  try {
+    const content = readFileSync('/proc/meminfo', 'utf-8')
+    const values: Record<string, number> = {}
+    for (const line of content.split('\n')) {
+      const match = line.match(/^(\w+):\s+(\d+)\s+kB/)
+      if (match) {
+        values[match[1]] = parseInt(match[2], 10) * 1024 // kB → bytes
+      }
+    }
+
+    const total = values['MemTotal'] ?? 0
+    const free = values['MemFree'] ?? 0
+    const available = values['MemAvailable'] ?? 0
+    const buffers = values['Buffers'] ?? 0
+    const cached = values['Cached'] ?? 0
+    const swapTotal = values['SwapTotal'] ?? 0
+    const swapFree = values['SwapFree'] ?? 0
+    const swapUsed = swapTotal - swapFree
+
+    return {
+      total,
+      free,
+      available,
+      buffers,
+      cached,
+      swapTotal,
+      swapFree,
+      swapUsed,
+      usedPercent: total > 0 ? Math.round(((total - available) / total) * 1000) / 10 : 0,
+      swapUsedPercent: swapTotal > 0 ? Math.round((swapUsed / swapTotal) * 1000) / 10 : 0,
+    }
+  } catch {
+    return { total: 0, free: 0, available: 0, buffers: 0, cached: 0, swapTotal: 0, swapFree: 0, swapUsed: 0, usedPercent: 0, swapUsedPercent: 0 }
+  }
+}
+
+export function getNetworkInterfaces(): NetworkInterface[] {
+  try {
+    const content = readFileSync('/proc/net/dev', 'utf-8')
+    const lines = content.trim().split('\n').slice(2) // skip header lines
+    const osInterfaces = os.networkInterfaces()
+
+    const result: NetworkInterface[] = []
+    for (const line of lines) {
+      const parts = line.trim().split(/\s+/)
+      const name = parts[0]?.replace(':', '')
+      if (!name || name === 'lo') continue
+
+      const ifaceAddrs = osInterfaces[name] ?? []
+      const ipv4 = ifaceAddrs.find((a) => a.family === 'IPv4')?.address ?? null
+      const ipv6 = ifaceAddrs.find((a) => a.family === 'IPv6')?.address ?? null
+
+      result.push({
+        name,
+        rx_bytes: parseInt(parts[1] ?? '0', 10),
+        tx_bytes: parseInt(parts[9] ?? '0', 10),
+        rx_packets: parseInt(parts[2] ?? '0', 10),
+        tx_packets: parseInt(parts[10] ?? '0', 10),
+        ipv4,
+        ipv6,
+      })
+    }
+    return result
   } catch {
     return []
   }

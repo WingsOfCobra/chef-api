@@ -16,6 +16,77 @@ const githubRoutes: FastifyPluginAsync = async (fastify) => {
     return repos
   })
 
+  // GET /github/repos/:owner/:repo — detailed repo info
+  fastify.get<{ Params: { owner: string; repo: string } }>(
+    '/repos/:owner/:repo',
+    { schema: { tags: ['GitHub'] } },
+    async (request) => {
+      const { owner, repo } = request.params
+      const cacheKey = `github:repo:${owner}/${repo}`
+
+      const cached = fastify.cache.get(cacheKey)
+      if (cached) return cached
+
+      const detail = await github.getRepoDetail(owner, repo)
+      fastify.cache.set(cacheKey, detail, 60)
+      return detail
+    }
+  )
+
+  // GET /github/repos/:owner/:repo/branches
+  fastify.get<{ Params: { owner: string; repo: string } }>(
+    '/repos/:owner/:repo/branches',
+    { schema: { tags: ['GitHub'] } },
+    async (request) => {
+      const { owner, repo } = request.params
+      const cacheKey = `github:branches:${owner}/${repo}`
+
+      const cached = fastify.cache.get(cacheKey)
+      if (cached) return cached
+
+      const branches = await github.listBranches(owner, repo)
+      fastify.cache.set(cacheKey, branches, 60)
+      return branches
+    }
+  )
+
+  // GET /github/repos/:owner/:repo/commits
+  fastify.get<{ Params: { owner: string; repo: string } }>(
+    '/repos/:owner/:repo/commits',
+    { schema: { tags: ['GitHub'] } },
+    async (request) => {
+      const { owner, repo } = request.params
+      const query = request.query as { sha?: string; per_page?: string }
+      const sha = query.sha
+      const perPage = query.per_page ? parseInt(query.per_page, 10) : 20
+      const cacheKey = `github:commits:${owner}/${repo}:${sha ?? 'default'}`
+
+      const cached = fastify.cache.get(cacheKey)
+      if (cached) return cached
+
+      const commits = await github.listCommits(owner, repo, sha, perPage)
+      fastify.cache.set(cacheKey, commits, 60)
+      return commits
+    }
+  )
+
+  // GET /github/repos/:owner/:repo/releases
+  fastify.get<{ Params: { owner: string; repo: string } }>(
+    '/repos/:owner/:repo/releases',
+    { schema: { tags: ['GitHub'] } },
+    async (request) => {
+      const { owner, repo } = request.params
+      const cacheKey = `github:releases:${owner}/${repo}`
+
+      const cached = fastify.cache.get(cacheKey)
+      if (cached) return cached
+
+      const releases = await github.listReleases(owner, repo)
+      fastify.cache.set(cacheKey, releases, 60)
+      return releases
+    }
+  )
+
   // GET /github/repos/:owner/:repo/prs
   fastify.get<{ Params: { owner: string; repo: string } }>(
     '/repos/:owner/:repo/prs',
