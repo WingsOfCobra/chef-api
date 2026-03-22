@@ -121,15 +121,37 @@ export async function executeJob(job: CronJob): Promise<CronHistory> {
       if (!jobConfig.command) {
         throw new Error('SSH job requires command in config')
       }
-      // Always run via SSH — even for localhost. The container mounts the SSH key
-      // so it can reach the host at 172.27.0.1 (docker bridge gateway) and run
-      // scripts with full host tooling (jq, himalaya, openclaw, etc.)
-      const host = jobConfig.host || 'localhost'
-      const result = await ssh.runCommand(host, jobConfig.command)
-      stdout = result.stdout
-      stderr = result.stderr
-      exitCode = result.code
-      status = (exitCode === 0) ? 'success' : 'failed'
+      const isLocal = !jobConfig.host || jobConfig.host === 'localhost' || jobConfig.host === '127.0.0.1'
+      if (isLocal) {
+        // Remap workspace path and replace `bash` with `sh` (Alpine container has no bash)
+        let cmd = (jobConfig.command ?? '')
+          .replace(/\/home\/anian\/.openclaw\/workspace\//g, '/workspace/')
+          .replace(/^bash /, 'sh ')
+          .replace(/ && bash /g, ' && sh ')
+          .replace(/; bash /g, '; sh ')
+        // If command is a bare script path (starts with /), prefix with sh
+        if (/^\/\S+\.sh/.test(cmd)) {
+          cmd = `sh ${cmd}`
+        }
+        try {
+          const result = await execAsync(cmd, { timeout: 60000, shell: '/bin/sh' })
+          stdout = result.stdout
+          stderr = result.stderr
+          exitCode = 0
+          status = 'success'
+        } catch (err: any) {
+          stdout = err.stdout ?? null
+          stderr = err.stderr ?? err.message ?? String(err)
+          exitCode = err.code ?? 1
+          status = 'failed'
+        }
+      } else {
+        const result = await ssh.runCommand(jobConfig.host!, jobConfig.command!)
+        stdout = result.stdout
+        stderr = result.stderr
+        exitCode = result.code
+        status = (exitCode === 0) ? 'success' : 'failed'
+      }
     } else if (job.type === 'http') {
       if (!jobConfig.url) {
         throw new Error('HTTP job requires url in config')
