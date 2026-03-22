@@ -127,6 +127,18 @@ db.exec(`
     last_indexed_at TEXT,
     last_offset INTEGER DEFAULT 0
   );
+
+  CREATE TABLE IF NOT EXISTS fleet_servers (
+    name TEXT PRIMARY KEY,
+    host TEXT NOT NULL,
+    user TEXT NOT NULL,
+    ssh_host TEXT NOT NULL,
+    tags TEXT,
+    last_seen TEXT,
+    os_info TEXT,
+    status TEXT NOT NULL DEFAULT 'unknown',
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
 `)
 
 // FTS5 virtual table — must be created separately (not inside transaction)
@@ -234,6 +246,18 @@ export interface AlertRule {
   enabled: number
   created_at: string
   updated_at: string
+}
+
+export interface FleetServer {
+  name: string
+  host: string
+  user: string
+  ssh_host: string
+  tags: string | null
+  last_seen: string | null
+  os_info: string | null
+  status: string
+  created_at: string
 }
 
 export interface AlertEvent {
