@@ -76,6 +76,8 @@ const envSchema = z.object({
   IMAP_PASS: z.string().default(''),
   IMAP_TLS: z.string().default('true').transform((v) => v === 'true'),
   EMAIL_CACHE_TTL_SECONDS: z.coerce.number().default(300),
+  ANSIBLE_PLAYBOOK_DIR: z.string().default(''),
+  ANSIBLE_INVENTORY: z.string().default(''),
 })
 
 const parsed = envSchema.safeParse(process.env)
@@ -113,6 +115,8 @@ export const config = {
   imapPass: env.IMAP_PASS,
   imapTls: env.IMAP_TLS,
   emailCacheTtlSeconds: env.EMAIL_CACHE_TTL_SECONDS,
+  ansiblePlaybookDir: env.ANSIBLE_PLAYBOOK_DIR,
+  ansibleInventory: env.ANSIBLE_INVENTORY,
 }
 
 export type Config = typeof config

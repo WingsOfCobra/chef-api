@@ -109,6 +109,17 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_alert_events_rule_id ON alert_events(rule_id);
   CREATE INDEX IF NOT EXISTS idx_alert_events_triggered_at ON alert_events(triggered_at);
 
+  CREATE TABLE IF NOT EXISTS ansible_jobs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    playbook TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','running','success','failed','cancelled')),
+    output TEXT,
+    exit_code INTEGER,
+    started_at TEXT,
+    finished_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
   CREATE TABLE IF NOT EXISTS log_sources (
     name TEXT PRIMARY KEY,
     type TEXT NOT NULL CHECK(type IN ('file', 'journald', 'docker')),
@@ -212,6 +223,17 @@ export interface LogSearchResult {
   line: string
   timestamp: string
   rank: number
+}
+
+export interface AnsibleJob {
+  id: number
+  playbook: string
+  status: 'pending' | 'running' | 'success' | 'failed' | 'cancelled'
+  output: string | null
+  exit_code: number | null
+  started_at: string | null
+  finished_at: string | null
+  created_at: string
 }
 
 export interface AlertRule {
