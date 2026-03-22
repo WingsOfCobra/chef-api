@@ -35,6 +35,23 @@ export function addToScheduler(job: CronJob): void {
       const result = await cronService.executeJob(current)
       const duration = Date.now() - startTime
       
+      // Log the full output for Loki
+      if (result.stdout) {
+        logger.info({
+          jobId: job.id,
+          jobName: job.name,
+          output: result.stdout.substring(0, 10000) // Limit to 10KB
+        }, '[CRON] Job stdout')
+      }
+      
+      if (result.stderr) {
+        logger.warn({
+          jobId: job.id,
+          jobName: job.name,
+          error: result.stderr.substring(0, 10000) // Limit to 10KB
+        }, '[CRON] Job stderr')
+      }
+      
       logger.info({
         jobId: job.id,
         jobName: job.name,

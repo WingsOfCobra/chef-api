@@ -4,6 +4,10 @@ const mockOctokit = {
   repos: {
     listForAuthenticatedUser: vi.fn(),
     listForOrg: vi.fn(),
+    get: vi.fn(),
+    listBranches: vi.fn(),
+    listCommits: vi.fn(),
+    listReleases: vi.fn(),
   },
   pulls: { list: vi.fn() },
   checks: { listForRef: vi.fn() },
@@ -30,6 +34,10 @@ import {
   createIssue,
   listWorkflowRuns,
   listNotifications,
+  getRepoDetail,
+  listBranches,
+  listCommits,
+  listReleases,
 } from './github.service'
 
 const fakeRepo = {
@@ -289,6 +297,235 @@ describe('github.service', () => {
         url: 'https://api.github.com/issues/1',
         updatedAt: '2025-01-01T00:00:00Z',
       })
+    })
+  })
+
+  describe('getRepoDetail', () => {
+    const fullRepoData = {
+      name: 'chef-api',
+      full_name: 'user/chef-api',
+      description: 'API for orchestration',
+      stargazers_count: 10,
+      forks_count: 3,
+      watchers_count: 8,
+      open_issues_count: 5,
+      size: 2048,
+      default_branch: 'main',
+      language: 'TypeScript',
+      topics: ['api', 'fastify'],
+      license: { spdx_id: 'MIT' },
+      visibility: 'public',
+      created_at: '2024-01-01T00:00:00Z',
+      updated_at: '2025-01-01T00:00:00Z',
+      pushed_at: '2025-01-15T00:00:00Z',
+      html_url: 'https://github.com/user/chef-api',
+      private: false,
+    }
+
+    it('maps all repo fields correctly', async () => {
+      mockOctokit.repos.get.mockResolvedValue({ data: fullRepoData })
+
+      const detail = await getRepoDetail('user', 'chef-api')
+
+      expect(detail.name).toBe('chef-api')
+      expect(detail.fullName).toBe('user/chef-api')
+      expect(detail.stars).toBe(10)
+      expect(detail.forks).toBe(3)
+      expect(detail.watchers).toBe(8)
+      expect(detail.language).toBe('TypeScript')
+      expect(detail.topics).toEqual(['api', 'fastify'])
+      expect(detail.license).toBe('MIT')
+      expect(detail.defaultBranch).toBe('main')
+      expect(detail.size).toBe(2048)
+      expect(detail.visibility).toBe('public')
+      expect(detail.createdAt).toBe('2024-01-01T00:00:00Z')
+    })
+
+    it('handles null license', async () => {
+      mockOctokit.repos.get.mockResolvedValue({
+        data: { ...fullRepoData, license: null },
+      })
+
+      const detail = await getRepoDetail('user', 'chef-api')
+      expect(detail.license).toBeNull()
+    })
+
+    it('handles missing topics (returns empty array)', async () => {
+      mockOctokit.repos.get.mockResolvedValue({
+        data: { ...fullRepoData, topics: undefined },
+      })
+
+      const detail = await getRepoDetail('user', 'chef-api')
+      expect(detail.topics).toEqual([])
+    })
+
+    it('falls back to private flag when visibility is missing', async () => {
+      mockOctokit.repos.get.mockResolvedValue({
+        data: { ...fullRepoData, visibility: undefined, private: true },
+      })
+
+      const detail = await getRepoDetail('user', 'chef-api')
+      expect(detail.visibility).toBe('private')
+    })
+  })
+
+  describe('listBranches', () => {
+    it('maps branch data correctly', async () => {
+      mockOctokit.repos.listBranches.mockResolvedValue({
+        data: [
+          { name: 'main', protected: true, commit: { sha: 'abc123' } },
+          { name: 'develop', protected: false, commit: { sha: 'def456' } },
+        ],
+      })
+
+      const branches = await listBranches('user', 'repo')
+
+      expect(branches).toHaveLength(2)
+      expect(branches[0]).toEqual({ name: 'main', protected: true, sha: 'abc123' })
+      expect(branches[1]).toEqual({ name: 'develop', protected: false, sha: 'def456' })
+    })
+
+    it('handles repo with no branches', async () => {
+      mockOctokit.repos.listBranches.mockResolvedValue({ data: [] })
+
+      const branches = await listBranches('user', 'repo')
+      expect(branches).toEqual([])
+    })
+  })
+
+  describe('listCommits', () => {
+    it('maps commit data and truncates message to first line', async () => {
+      mockOctokit.repos.listCommits.mockResolvedValue({
+        data: [
+          {
+            sha: 'abc123def456',
+            commit: {
+              message: 'feat: add new endpoint\n\nDetailed description here',
+              author: { name: 'Dev User', date: '2025-01-01T00:00:00Z' },
+            },
+            author: { login: 'devuser' },
+            html_url: 'https://github.com/user/repo/commit/abc123',
+          },
+        ],
+      })
+
+      const commits = await listCommits('user', 'repo')
+
+      expect(commits).toHaveLength(1)
+      expect(commits[0].sha).toBe('abc123def456')
+      expect(commits[0].message).toBe('feat: add new endpoint')
+      expect(commits[0].author).toBe('devuser')
+      expect(commits[0].date).toBe('2025-01-01T00:00:00Z')
+    })
+
+    it('falls back to commit.author.name when author login is null (deleted account)', async () => {
+      mockOctokit.repos.listCommits.mockResolvedValue({
+        data: [
+          {
+            sha: 'xyz789',
+            commit: {
+              message: 'old commit',
+              author: { name: 'Ghost User', date: '2024-01-01T00:00:00Z' },
+            },
+            author: null,
+            html_url: 'https://github.com/user/repo/commit/xyz789',
+          },
+        ],
+      })
+
+      const commits = await listCommits('user', 'repo')
+      expect(commits[0].author).toBe('Ghost User')
+    })
+
+    it('passes sha parameter when provided', async () => {
+      mockOctokit.repos.listCommits.mockResolvedValue({ data: [] })
+
+      await listCommits('user', 'repo', 'develop', 5)
+
+      expect(mockOctokit.repos.listCommits).toHaveBeenCalledWith({
+        owner: 'user',
+        repo: 'repo',
+        sha: 'develop',
+        per_page: 5,
+      })
+    })
+
+    it('omits sha from request when not provided', async () => {
+      mockOctokit.repos.listCommits.mockResolvedValue({ data: [] })
+
+      await listCommits('user', 'repo')
+
+      expect(mockOctokit.repos.listCommits).toHaveBeenCalledWith({
+        owner: 'user',
+        repo: 'repo',
+        per_page: 20,
+      })
+    })
+  })
+
+  describe('listReleases', () => {
+    it('maps release data correctly', async () => {
+      mockOctokit.repos.listReleases.mockResolvedValue({
+        data: [
+          {
+            id: 1,
+            tag_name: 'v1.0.0',
+            name: 'First Release',
+            draft: false,
+            prerelease: false,
+            created_at: '2025-01-01T00:00:00Z',
+            published_at: '2025-01-01T12:00:00Z',
+            author: { login: 'releaser' },
+            html_url: 'https://github.com/user/repo/releases/tag/v1.0.0',
+          },
+        ],
+      })
+
+      const releases = await listReleases('user', 'repo')
+
+      expect(releases).toHaveLength(1)
+      expect(releases[0]).toEqual({
+        id: 1,
+        tagName: 'v1.0.0',
+        name: 'First Release',
+        draft: false,
+        prerelease: false,
+        createdAt: '2025-01-01T00:00:00Z',
+        publishedAt: '2025-01-01T12:00:00Z',
+        author: 'releaser',
+        url: 'https://github.com/user/repo/releases/tag/v1.0.0',
+      })
+    })
+
+    it('handles null name', async () => {
+      mockOctokit.repos.listReleases.mockResolvedValue({
+        data: [
+          {
+            id: 2,
+            tag_name: 'v0.1.0',
+            name: null,
+            draft: true,
+            prerelease: true,
+            created_at: '2025-01-01T00:00:00Z',
+            published_at: null,
+            author: { login: 'dev' },
+            html_url: 'https://github.com/user/repo/releases/tag/v0.1.0',
+          },
+        ],
+      })
+
+      const releases = await listReleases('user', 'repo')
+      expect(releases[0].name).toBeNull()
+      expect(releases[0].publishedAt).toBeNull()
+      expect(releases[0].draft).toBe(true)
+      expect(releases[0].prerelease).toBe(true)
+    })
+
+    it('handles repo with no releases', async () => {
+      mockOctokit.repos.listReleases.mockResolvedValue({ data: [] })
+
+      const releases = await listReleases('user', 'repo')
+      expect(releases).toEqual([])
     })
   })
 })

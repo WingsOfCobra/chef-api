@@ -26,6 +26,28 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
     return disk
   })
 
+  // GET /system/memory — detailed memory breakdown from /proc/meminfo
+  fastify.get('/memory', { schema: { tags: ['System'] } }, async () => {
+    const cacheKey = 'system:memory'
+    const cached = fastify.cache.get(cacheKey)
+    if (cached) return cached
+
+    const memory = system.getMemoryDetail()
+    fastify.cache.set(cacheKey, memory, 5) // 5s TTL
+    return memory
+  })
+
+  // GET /system/network — per-interface network stats with IPs
+  fastify.get('/network', { schema: { tags: ['System'] } }, async () => {
+    const cacheKey = 'system:network'
+    const cached = fastify.cache.get(cacheKey)
+    if (cached) return cached
+
+    const interfaces = system.getNetworkInterfaces()
+    fastify.cache.set(cacheKey, interfaces, 5) // 5s TTL
+    return interfaces
+  })
+
   // GET /system/processes
   // Cached for 3s - processes change frequently but don't need real-time
   fastify.get('/processes', { schema: { tags: ['System'] } }, async (request) => {

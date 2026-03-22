@@ -52,6 +52,53 @@ export interface WorkflowRun {
   branch: string
 }
 
+export interface RepoDetail {
+  name: string
+  fullName: string
+  description: string | null
+  stars: number
+  forks: number
+  watchers: number
+  openIssues: number
+  size: number
+  defaultBranch: string
+  language: string | null
+  topics: string[]
+  license: string | null
+  visibility: string
+  createdAt: string
+  updatedAt: string
+  pushedAt: string
+  url: string
+  private: boolean
+}
+
+export interface BranchSummary {
+  name: string
+  protected: boolean
+  sha: string
+}
+
+export interface CommitSummary {
+  sha: string
+  message: string
+  author: string
+  date: string
+  url: string
+}
+
+export interface ReleaseSummary {
+  id: number
+  tagName: string
+  name: string | null
+  draft: boolean
+  prerelease: boolean
+  createdAt: string
+  publishedAt: string | null
+  author: string
+  url: string
+}
+
 export interface Notification {
   id: string
   reason: string
@@ -212,6 +259,83 @@ export async function listWorkflowRuns(owner: string, repo: string): Promise<Wor
     createdAt: r.created_at,
     url: r.html_url,
     branch: r.head_branch ?? '',
+  }))
+}
+
+export async function getRepoDetail(owner: string, repo: string): Promise<RepoDetail> {
+  const octokit = getOctokit()
+  const { data } = await octokit.repos.get({ owner, repo })
+
+  return {
+    name: data.name,
+    fullName: data.full_name,
+    description: data.description ?? null,
+    stars: data.stargazers_count ?? 0,
+    forks: data.forks_count ?? 0,
+    watchers: data.watchers_count ?? 0,
+    openIssues: data.open_issues_count ?? 0,
+    size: data.size ?? 0,
+    defaultBranch: data.default_branch ?? 'main',
+    language: data.language ?? null,
+    topics: data.topics ?? [],
+    license: data.license?.spdx_id ?? null,
+    visibility: data.visibility ?? (data.private ? 'private' : 'public'),
+    createdAt: data.created_at ?? '',
+    updatedAt: data.updated_at ?? '',
+    pushedAt: data.pushed_at ?? '',
+    url: data.html_url,
+    private: data.private,
+  }
+}
+
+export async function listBranches(owner: string, repo: string): Promise<BranchSummary[]> {
+  const octokit = getOctokit()
+  const { data } = await octokit.repos.listBranches({ owner, repo, per_page: 100 })
+
+  return data.map((b) => ({
+    name: b.name,
+    protected: b.protected,
+    sha: b.commit.sha,
+  }))
+}
+
+export async function listCommits(
+  owner: string,
+  repo: string,
+  sha?: string,
+  perPage = 20
+): Promise<CommitSummary[]> {
+  const octokit = getOctokit()
+  const { data } = await octokit.repos.listCommits({
+    owner,
+    repo,
+    ...(sha ? { sha } : {}),
+    per_page: perPage,
+  })
+
+  return data.map((c) => ({
+    sha: c.sha,
+    message: c.commit.message.split('\n')[0],
+    author: c.author?.login ?? c.commit.author?.name ?? 'unknown',
+    date: c.commit.author?.date ?? '',
+    url: c.html_url,
+  }))
+}
+
+export async function listReleases(owner: string, repo: string): Promise<ReleaseSummary[]> {
+  const octokit = getOctokit()
+  const { data } = await octokit.repos.listReleases({ owner, repo, per_page: 10 })
+
+  return data.map((r) => ({
+    id: r.id,
+    tagName: r.tag_name,
+    name: r.name ?? null,
+    draft: r.draft,
+    prerelease: r.prerelease,
+    createdAt: r.created_at,
+    publishedAt: r.published_at ?? null,
+    author: r.author?.login ?? 'unknown',
+    url: r.html_url,
   }))
 }
 
