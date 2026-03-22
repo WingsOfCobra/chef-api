@@ -154,6 +154,117 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
     fastify.cache.set(cacheKey, processes, 3) // 3s TTL
     return processes
   })
+  // GET /system/network/connections — Active network connections via SSH
+  fastify.get('/network/connections', {
+    schema: {
+      tags: ['System'],
+      summary: 'Get active network connections on the host',
+      description: 'Returns active TCP/UDP connections from the host via SSH (ss -tunap).',
+      response: {
+        200: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              proto: { type: 'string' },
+              localAddr: { type: 'string' },
+              localPort: { type: 'number' },
+              remoteAddr: { type: 'string' },
+              remotePort: { type: 'number' },
+              state: { type: 'string' },
+              pid: { type: ['number', 'null'] },
+              process: { type: ['string', 'null'] },
+            },
+          },
+        },
+      },
+    },
+  }, async () => {
+    const cacheKey = 'system:network:connections'
+    const cached = fastify.cache.get(cacheKey)
+    if (cached) return cached
+
+    const connections = await system.getNetworkConnections()
+    fastify.cache.set(cacheKey, connections, 5) // 5s TTL
+    return connections
+  })
+
+  // GET /system/network/bandwidth — Real-time bandwidth per interface
+  fastify.get('/network/bandwidth', {
+    schema: {
+      tags: ['System'],
+      summary: 'Get real-time bandwidth per network interface',
+      description: 'Reads /proc/net/dev twice with 1s delay and computes bytes/sec delta for each interface.',
+      response: {
+        200: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              name: { type: 'string' },
+              rx_bytes_sec: { type: 'number' },
+              tx_bytes_sec: { type: 'number' },
+              rx_mbps: { type: 'number' },
+              tx_mbps: { type: 'number' },
+            },
+          },
+        },
+      },
+    },
+  }, async () => {
+    const cacheKey = 'system:network:bandwidth'
+    const cached = fastify.cache.get(cacheKey)
+    if (cached) return cached
+
+    const bandwidth = await system.getNetworkBandwidth()
+    fastify.cache.set(cacheKey, bandwidth, 3) // 3s TTL
+    return bandwidth
+  })
+
+  // GET /system/network/latency — Ping latency to specified hosts
+  fastify.get('/network/latency', {
+    schema: {
+      tags: ['System'],
+      summary: 'Check ping latency to specified hosts',
+      description: 'Pings each host 3 times via SSH and returns min/avg/max latency. Defaults to google.com, 1.1.1.1, 8.8.8.8. Max 5 hosts.',
+      querystring: {
+        type: 'object',
+        properties: {
+          hosts: { type: 'string' },
+        },
+      },
+      response: {
+        200: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              host: { type: 'string' },
+              avg_ms: { type: ['number', 'null'] },
+              min_ms: { type: ['number', 'null'] },
+              max_ms: { type: ['number', 'null'] },
+              loss_percent: { type: 'number' },
+              reachable: { type: 'boolean' },
+            },
+          },
+        },
+      },
+    },
+  }, async (request) => {
+    const query = request.query as { hosts?: string }
+    const defaultHosts = ['google.com', '1.1.1.1', '8.8.8.8']
+    const hosts = query.hosts
+      ? query.hosts.split(',').map((h) => h.trim()).filter(Boolean).slice(0, 5)
+      : defaultHosts
+
+    const cacheKey = `system:network:latency:${[...hosts].sort().join(',')}`
+    const cached = fastify.cache.get(cacheKey)
+    if (cached) return cached
+
+    const latency = await system.getNetworkLatency(hosts)
+    fastify.cache.set(cacheKey, latency, 10) // 10s TTL
+    return latency
+  })
 }
 
 export default systemRoutes
