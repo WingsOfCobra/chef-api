@@ -49,9 +49,21 @@ const emailRoutes: FastifyPluginAsync = async (fastify) => {
     const cached = fastify.cache.get(cacheKey)
     if (cached) return cached
 
-    const result = await emailService.getUnread()
-    fastify.cache.set(cacheKey, result, config.emailCacheTtlSeconds)
-    return result
+    try {
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('email timeout')), 8000)
+      )
+      const result = await Promise.race([emailService.getUnread(), timeoutPromise])
+      fastify.cache.set(cacheKey, result, config.emailCacheTtlSeconds)
+      return result
+    } catch (err) {
+      const staleCache = fastify.cache.get(cacheKey)
+      if (staleCache) {
+        request.log.warn('Email IMAP slow/timeout, returning stale cache')
+        return staleCache
+      }
+      throw err
+    }
   })
 
   // GET /email/search — search by sender, subject, date range

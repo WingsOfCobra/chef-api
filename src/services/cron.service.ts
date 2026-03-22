@@ -2,6 +2,9 @@ import { db, CronJob, CronHistory } from '../db'
 import { config } from '../config'
 import * as ssh from './ssh.service'
 import axios from 'axios'
+import { exec as execCb } from 'child_process'
+import { promisify } from 'util'
+const execAsync = promisify(execCb)
 
 export interface CronJobConfig {
   // SSH type
@@ -118,14 +121,31 @@ export async function executeJob(job: CronJob): Promise<CronHistory> {
 
   try {
     if (job.type === 'ssh') {
-      if (!jobConfig.host || !jobConfig.command) {
-        throw new Error('SSH job requires host and command in config')
+      if (!jobConfig.command) {
+        throw new Error('SSH job requires command in config')
       }
-      const result = await ssh.runCommand(jobConfig.host, jobConfig.command)
-      stdout = result.stdout
-      stderr = result.stderr
-      exitCode = result.code
-      status = (exitCode === 0) ? 'success' : 'failed'
+      const isLocal = !jobConfig.host || jobConfig.host === 'localhost' || jobConfig.host === '127.0.0.1'
+      if (isLocal) {
+        const cmd = (jobConfig.command ?? '').replace(/\/home\/anian\/.openclaw\/workspace\//g, '/workspace/')
+        try {
+          const result = await execAsync(cmd, { timeout: 60000 })
+          stdout = result.stdout
+          stderr = result.stderr
+          exitCode = 0
+          status = 'success'
+        } catch (err: any) {
+          stdout = err.stdout ?? null
+          stderr = err.stderr ?? err.message ?? String(err)
+          exitCode = err.code ?? 1
+          status = 'failed'
+        }
+      } else {
+        const result = await ssh.runCommand(jobConfig.host!, jobConfig.command!)
+        stdout = result.stdout
+        stderr = result.stderr
+        exitCode = result.code
+        status = (exitCode === 0) ? 'success' : 'failed'
+      }
     } else if (job.type === 'http') {
       if (!jobConfig.url) {
         throw new Error('HTTP job requires url in config')
