@@ -1,6 +1,7 @@
 import Fastify from 'fastify'
 import swagger from '@fastify/swagger'
 import swaggerUi from '@fastify/swagger-ui'
+import websocket from '@fastify/websocket'
 import { config } from './config'
 import authPlugin from './plugins/auth'
 import cachePlugin from './plugins/cache'
@@ -19,6 +20,7 @@ import { initScheduler } from './services/cron-scheduler'
 import { cleanupOldEvents } from './services/hooks.service'
 import { startAlertChecker } from './services/alert-checker'
 import { initLogSources, runIndexCycle } from './services/logs.service'
+import wsRoutes from './routes/ws'
 
 async function build() {
   const fastify = Fastify({
@@ -75,6 +77,7 @@ async function build() {
   })
 
   // Plugins
+  await fastify.register(websocket)
   await fastify.register(cachePlugin)
   await fastify.register(authPlugin)
 
@@ -90,6 +93,7 @@ async function build() {
   await fastify.register(emailRoutes, { prefix: '/email' })
   await fastify.register(servicesRoutes, { prefix: '/services' })
   await fastify.register(alertsRoutes, { prefix: '/alerts' })
+  await fastify.register(wsRoutes, { prefix: '/ws' })
 
   return fastify
 }
