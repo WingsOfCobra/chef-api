@@ -11,6 +11,11 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -19,6 +24,11 @@ jobs:
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           script: |
             cd ${{ secrets.DEPLOY_DIR }}
+            # Pull latest docker-compose.yml from repo
+            curl -fsSL https://raw.githubusercontent.com/WingsOfCobra/chef-api/main/docker-compose.yml -o docker-compose.yml.new
+            mv docker-compose.yml.new docker-compose.yml
+            # Deploy
             docker compose pull
-            docker compose up -d --force-recreate --remove-orphans
+            docker compose down
+            docker compose up -d
             docker image prune -f
