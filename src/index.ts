@@ -159,7 +159,6 @@ async function build() {
     await fastify.register(wsRoutes, { prefix: '/ws' })
   }
   await fastify.register(dashboardsRoutes, { prefix: '/dashboards' })
-  await fastify.register(wsRoutes, { prefix: '/ws' })
 
   return fastify
 }
