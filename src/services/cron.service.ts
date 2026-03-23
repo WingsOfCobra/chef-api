@@ -95,6 +95,47 @@ export function createJob(input: CreateJobInput): CronJob {
   return result
 }
 
+export function updateJob(id: number, updates: Partial<CreateJobInput>): CronJob | undefined {
+  const existing = getJob(id)
+  if (!existing) return undefined
+
+  const fields: string[] = []
+  const values: any[] = []
+
+  if (updates.name !== undefined) {
+    fields.push('name = ?')
+    values.push(updates.name)
+  }
+
+  if (updates.schedule !== undefined) {
+    fields.push('schedule = ?')
+    values.push(updates.schedule)
+  }
+
+  if (updates.enabled !== undefined) {
+    fields.push('enabled = ?')
+    values.push(updates.enabled ? 1 : 0)
+  }
+
+  if (updates.config !== undefined) {
+    fields.push('config = ?')
+    values.push(JSON.stringify(updates.config))
+  }
+
+  if (fields.length === 0) {
+    // No updates provided, return existing
+    return existing
+  }
+
+  fields.push('updated_at = datetime(\'now\')')
+  values.push(id)
+
+  const sql = `UPDATE cron_jobs SET ${fields.join(', ')} WHERE id = ?`
+  db.prepare(sql).run(...values)
+
+  return getJob(id)
+}
+
 export function deleteJob(id: number): boolean {
   const result = db.prepare('DELETE FROM cron_jobs WHERE id = ?').run(id)
   return result.changes > 0
