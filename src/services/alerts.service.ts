@@ -1,5 +1,6 @@
 import axios from 'axios'
-import { db, AlertRule, AlertEvent } from '../db'
+import { db, AlertRule, AlertEvent, AlertHistory } from '../db'
+import { config } from '../config'
 
 export interface WebhookPayload {
   rule: string
@@ -7,6 +8,7 @@ export interface WebhookPayload {
   target: string | null
   value: number | null
   threshold: number | null
+  severity: string
   timestamp: string
 }
 
@@ -28,17 +30,25 @@ export function createRule(data: {
   target?: string
   threshold?: number
   webhook_url: string
+  severity?: 'info' | 'warning' | 'critical'
 }): AlertRule {
   const stmt = db.prepare(
-    'INSERT INTO alert_rules (name, type, target, threshold, webhook_url) VALUES (?, ?, ?, ?, ?)'
+    'INSERT INTO alert_rules (name, type, target, threshold, webhook_url, severity) VALUES (?, ?, ?, ?, ?, ?)'
   )
-  const result = stmt.run(data.name, data.type, data.target ?? null, data.threshold ?? null, data.webhook_url)
+  const result = stmt.run(
+    data.name,
+    data.type,
+    data.target ?? null,
+    data.threshold ?? null,
+    data.webhook_url,
+    data.severity ?? 'warning'
+  )
   return getRuleById(Number(result.lastInsertRowid))!
 }
 
 export function updateRule(
   id: number,
-  data: { name?: string; target?: string; threshold?: number; webhook_url?: string; enabled?: boolean }
+  data: { name?: string; target?: string; threshold?: number; webhook_url?: string; enabled?: boolean; severity?: 'info' | 'warning' | 'critical' }
 ): AlertRule | undefined {
   const rule = getRuleById(id)
   if (!rule) return undefined
@@ -51,6 +61,7 @@ export function updateRule(
   if (data.threshold !== undefined) { fields.push('threshold = ?'); values.push(data.threshold) }
   if (data.webhook_url !== undefined) { fields.push('webhook_url = ?'); values.push(data.webhook_url) }
   if (data.enabled !== undefined) { fields.push('enabled = ?'); values.push(data.enabled ? 1 : 0) }
+  if (data.severity !== undefined) { fields.push('severity = ?'); values.push(data.severity) }
 
   if (fields.length === 0) return rule
 
@@ -90,6 +101,13 @@ function recordEvent(ruleId: number, payload: WebhookPayload, delivered: boolean
 const RETRY_DELAYS = [0, 5000, 30000]
 
 export async function fireWebhook(rule: AlertRule, payload: WebhookPayload): Promise<AlertEvent> {
+  // Store in alert history
+  storeAlertHistory(rule.id, payload.type, payload.target, payload.value, payload.severity)
+  
+  // Send notifications (fire and forget, don't block webhook)
+  sendTelegramNotification(payload).catch(() => {})
+  sendDiscordNotification(payload).catch(() => {})
+  
   let lastError: string | null = null
   let attempts = 0
 
@@ -117,6 +135,74 @@ export function buildPayload(
     target: rule.target,
     value,
     threshold: rule.threshold,
+    severity: rule.severity,
     timestamp: new Date().toISOString(),
+  }
+}
+
+export function storeAlertHistory(
+  ruleId: number | null,
+  type: string,
+  target: string | null,
+  value: number | null,
+  severity: string
+): AlertHistory {
+  const stmt = db.prepare(
+    'INSERT INTO alert_history (rule_id, type, target, value, severity) VALUES (?, ?, ?, ?, ?)'
+  )
+  const result = stmt.run(ruleId, type, target, value, severity)
+  return db.prepare('SELECT * FROM alert_history WHERE id = ?').get(Number(result.lastInsertRowid)) as AlertHistory
+}
+
+export function getAlertHistory(limit = 100): AlertHistory[] {
+  return db
+    .prepare('SELECT * FROM alert_history ORDER BY triggered_at DESC LIMIT ?')
+    .all(limit) as AlertHistory[]
+}
+
+async function sendTelegramNotification(payload: WebhookPayload): Promise<void> {
+  const token = process.env.NOTIFY_TELEGRAM_BOT_TOKEN
+  const chatId = process.env.NOTIFY_TELEGRAM_CHAT_ID
+  
+  if (!token || !chatId) return
+
+  const emoji = payload.severity === 'critical' ? '🔴' : payload.severity === 'warning' ? '⚠️' : 'ℹ️'
+  const text = `${emoji} *Alert: ${payload.rule}*\n\nType: ${payload.type}\nTarget: ${payload.target ?? 'N/A'}\nValue: ${payload.value ?? 'N/A'}\nThreshold: ${payload.threshold ?? 'N/A'}\nSeverity: ${payload.severity}\nTime: ${payload.timestamp}`
+
+  try {
+    await axios.post(`https://api.telegram.org/bot${token}/sendMessage`, {
+      chat_id: chatId,
+      text,
+      parse_mode: 'Markdown',
+    }, { timeout: 10000 })
+  } catch (err) {
+    console.error('Telegram notification failed:', err instanceof Error ? err.message : String(err))
+  }
+}
+
+async function sendDiscordNotification(payload: WebhookPayload): Promise<void> {
+  const webhookUrl = process.env.NOTIFY_DISCORD_WEBHOOK_URL
+  
+  if (!webhookUrl) return
+
+  const color = payload.severity === 'critical' ? 0xFF0000 : payload.severity === 'warning' ? 0xFFA500 : 0x0099FF
+
+  try {
+    await axios.post(webhookUrl, {
+      embeds: [{
+        title: `Alert: ${payload.rule}`,
+        color,
+        fields: [
+          { name: 'Type', value: payload.type, inline: true },
+          { name: 'Target', value: payload.target ?? 'N/A', inline: true },
+          { name: 'Value', value: String(payload.value ?? 'N/A'), inline: true },
+          { name: 'Threshold', value: String(payload.threshold ?? 'N/A'), inline: true },
+          { name: 'Severity', value: payload.severity, inline: true },
+        ],
+        timestamp: payload.timestamp,
+      }],
+    }, { timeout: 10000 })
+  } catch (err) {
+    console.error('Discord notification failed:', err instanceof Error ? err.message : String(err))
   }
 }
