@@ -91,6 +91,80 @@ describe('cron routes', () => {
     })
   })
 
+  describe('PATCH /cron/jobs/:id', () => {
+    it('updates job name', async () => {
+      const create = await app.inject({
+        method: 'POST',
+        url: '/cron/jobs',
+        headers: authHeaders(),
+        payload: { name: 'original-name', preset: 'disk-check' },
+      })
+      const id = create.json().id
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: `/cron/jobs/${id}`,
+        headers: authHeaders(),
+        payload: { name: 'updated-name' },
+      })
+
+      expect(res.statusCode).toBe(200)
+      expect(res.json().name).toBe('updated-name')
+      expect(res.json().id).toBe(id)
+    })
+
+    it('updates job schedule', async () => {
+      const create = await app.inject({
+        method: 'POST',
+        url: '/cron/jobs',
+        headers: authHeaders(),
+        payload: { name: 'test-job', preset: 'disk-check' },
+      })
+      const id = create.json().id
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: `/cron/jobs/${id}`,
+        headers: authHeaders(),
+        payload: { schedule: '*/5 * * * *' },
+      })
+
+      expect(res.statusCode).toBe(200)
+      expect(res.json().schedule).toBe('*/5 * * * *')
+    })
+
+    it('updates job enabled status', async () => {
+      const create = await app.inject({
+        method: 'POST',
+        url: '/cron/jobs',
+        headers: authHeaders(),
+        payload: { name: 'test-job', preset: 'disk-check', enabled: true },
+      })
+      const id = create.json().id
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: `/cron/jobs/${id}`,
+        headers: authHeaders(),
+        payload: { enabled: false },
+      })
+
+      expect(res.statusCode).toBe(200)
+      expect(res.json().enabled).toBe(0)
+    })
+
+    it('returns 404 for nonexistent job', async () => {
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/cron/jobs/999',
+        headers: authHeaders(),
+        payload: { name: 'does-not-matter' },
+      })
+
+      expect(res.statusCode).toBe(404)
+    })
+  })
+
   describe('DELETE /cron/jobs/:id', () => {
     it('deletes an existing job', async () => {
       const create = await app.inject({
