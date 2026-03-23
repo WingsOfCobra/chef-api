@@ -25,7 +25,6 @@ async function buildApp() {
   const { default: alertsRoutes } = await import('./routes/alerts')
   const { default: secretsRoutes } = await import('./routes/secrets')
   const { default: ansibleRoutes } = await import('./routes/ansible')
-  const { default: fleetRoutes } = await import('./routes/fleet')
   const { default: metricsRoutes } = await import('./routes/metrics')
   const { default: dashboardsRoutes } = await import('./routes/dashboards')
   const { default: wsRoutes } = await import('./routes/ws')
@@ -107,7 +106,6 @@ async function buildApp() {
     await fastify.register(alertsRoutes, { prefix: '/alerts' })
     await fastify.register(secretsRoutes, { prefix: '/secrets' })
     await fastify.register(ansibleRoutes, { prefix: '/ansible' })
-    await fastify.register(fleetRoutes, { prefix: '/fleet' })
     await fastify.register(wsRoutes, { prefix: '/ws' })
   }
   
