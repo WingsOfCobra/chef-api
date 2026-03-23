@@ -3,6 +3,7 @@ import { vi, describe, it, expect, beforeEach } from 'vitest'
 const mockClient = {
   get: vi.fn(),
   post: vi.fn(),
+  delete: vi.fn(),
 }
 
 vi.mock('axios', () => ({
@@ -15,6 +16,7 @@ import {
   listContainers,
   restartContainer,
   stopContainer,
+  removeContainer,
   getContainerLogs,
   getContainerStats,
   getDockerStats,
@@ -136,6 +138,51 @@ describe('docker.service', () => {
       mockClient.post.mockResolvedValue({})
       await stopContainer('abc123')
       expect(mockClient.post).toHaveBeenCalledWith('/containers/abc123/stop')
+    })
+  })
+
+  describe('removeContainer', () => {
+    it('removes a stopped container successfully', async () => {
+      mockClient.get.mockResolvedValue({
+        data: {
+          State: { Status: 'exited' },
+        },
+      })
+      mockClient.delete.mockResolvedValue({})
+
+      await removeContainer('abc123')
+
+      expect(mockClient.get).toHaveBeenCalledWith('/containers/abc123/json')
+      expect(mockClient.delete).toHaveBeenCalledWith('/containers/abc123')
+    })
+
+    it('throws 409 error when container is running', async () => {
+      mockClient.get.mockResolvedValue({
+        data: {
+          State: { Status: 'running' },
+        },
+      })
+
+      await expect(removeContainer('abc123')).rejects.toThrow('Container must be stopped first')
+      await expect(removeContainer('abc123')).rejects.toMatchObject({ statusCode: 409 })
+      expect(mockClient.delete).not.toHaveBeenCalled()
+    })
+
+    it('throws 404 error when container does not exist', async () => {
+      mockClient.get.mockRejectedValue({
+        response: { status: 404 },
+      })
+
+      await expect(removeContainer('nonexistent')).rejects.toThrow('Container not found')
+      await expect(removeContainer('nonexistent')).rejects.toMatchObject({ statusCode: 404 })
+      expect(mockClient.delete).not.toHaveBeenCalled()
+    })
+
+    it('re-throws other errors from inspect call', async () => {
+      mockClient.get.mockRejectedValue(new Error('Network error'))
+
+      await expect(removeContainer('abc123')).rejects.toThrow('Network error')
+      expect(mockClient.delete).not.toHaveBeenCalled()
     })
   })
 

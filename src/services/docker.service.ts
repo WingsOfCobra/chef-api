@@ -121,6 +121,34 @@ export async function stopContainer(id: string): Promise<void> {
   await client.post(`/containers/${id}/stop`)
 }
 
+export async function removeContainer(id: string): Promise<void> {
+  const client = dockerClient()
+  
+  // Check container state
+  try {
+    const { data: inspect } = await client.get(`/containers/${id}/json`)
+    const state = inspect?.State?.Status ?? ''
+    
+    if (state === 'running') {
+      const error = new Error('Container must be stopped first')
+      ;(error as any).statusCode = 409
+      throw error
+    }
+  } catch (err: any) {
+    // If container doesn't exist, Docker returns 404
+    if (err.response?.status === 404) {
+      const notFound = new Error('Container not found')
+      ;(notFound as any).statusCode = 404
+      throw notFound
+    }
+    // Re-throw our own 409 error or other errors
+    throw err
+  }
+  
+  // Remove the container
+  await client.delete(`/containers/${id}`)
+}
+
 export async function getContainerLogs(id: string, lines = 100): Promise<string> {
   const client = dockerClient()
   const { data } = await client.get(
