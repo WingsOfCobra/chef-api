@@ -116,3 +116,75 @@ export function cleanupOldEvents(ttlDays?: number): number {
   ).run(`-${days} days`)
   return result.changes
 }
+
+export interface AlertmanagerAlert {
+  status: string
+  labels: Record<string, string>
+  annotations: Record<string, string>
+  startsAt: string
+  endsAt: string
+}
+
+export interface AlertmanagerWebhook {
+  version: string
+  status: string
+  groupKey: string
+  receiver: string
+  groupLabels: Record<string, string>
+  commonLabels: Record<string, string>
+  commonAnnotations: Record<string, string>
+  alerts: AlertmanagerAlert[]
+}
+
+export function formatAlertmanagerMessage(webhook: AlertmanagerWebhook): string {
+  const isFiring = webhook.status === 'firing'
+  const emoji = isFiring ? '🔴' : '✅'
+  const statusText = isFiring ? 'FIRING' : 'RESOLVED'
+  const alertname = webhook.commonLabels.alertname || 'Unknown Alert'
+  const severity = webhook.commonLabels.severity || ''
+  const summary = webhook.commonAnnotations.summary || ''
+  const description = webhook.commonAnnotations.description || ''
+  const alertCount = webhook.alerts.length
+
+  let message = `${emoji} ${statusText}: ${alertname}`
+  if (severity) {
+    message += ` (${severity})`
+  }
+  message += '\n'
+
+  if (summary) {
+    message += `Summary: ${summary}\n`
+  }
+
+  if (description && isFiring) {
+    message += `Description: ${description}\n`
+  }
+
+  if (isFiring) {
+    message += `Alerts: ${alertCount}`
+  }
+
+  return message
+}
+
+export async function sendToNextcloudTalk(message: string): Promise<void> {
+  if (!config.nextcloudAdminPassword) {
+    throw new Error('Nextcloud Talk not configured: missing NEXTCLOUD_ADMIN_PASSWORD')
+  }
+
+  const url = `${config.nextcloudUrl}/ocs/v2.php/apps/spreed/api/v1/chat/${config.nextcloudTalkRoomToken}`
+  const auth = Buffer.from(`${config.nextcloudAdminUser}:${config.nextcloudAdminPassword}`).toString('base64')
+
+  await axios.post(
+    url,
+    { message },
+    {
+      headers: {
+        'OCS-APIRequest': 'true',
+        'Content-Type': 'application/json',
+        Authorization: `Basic ${auth}`,
+      },
+      timeout: 10000,
+    },
+  )
+}

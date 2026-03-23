@@ -142,4 +142,149 @@ describe('hooks.service', () => {
         .rejects.toThrow('Discord notification not configured')
     })
   })
+
+  describe('formatAlertmanagerMessage', () => {
+    it('formats firing alert with all fields', () => {
+      const webhook: hooksService.AlertmanagerWebhook = {
+        version: '4',
+        status: 'firing',
+        groupKey: 'test-group',
+        receiver: 'nextcloud-talk',
+        groupLabels: {},
+        commonLabels: {
+          alertname: 'ContainerDown',
+          severity: 'critical',
+        },
+        commonAnnotations: {
+          summary: 'Container nginx is down',
+          description: 'Has been down for 5 minutes',
+        },
+        alerts: [
+          {
+            status: 'firing',
+            labels: { alertname: 'ContainerDown', severity: 'critical' },
+            annotations: { summary: 'Container nginx is down', description: 'Has been down for 5 minutes' },
+            startsAt: '2026-03-23T10:00:00Z',
+            endsAt: '0001-01-01T00:00:00Z',
+          },
+        ],
+      }
+
+      const message = hooksService.formatAlertmanagerMessage(webhook)
+
+      expect(message).toContain('🔴 FIRING: ContainerDown')
+      expect(message).toContain('(critical)')
+      expect(message).toContain('Summary: Container nginx is down')
+      expect(message).toContain('Description: Has been down for 5 minutes')
+      expect(message).toContain('Alerts: 1')
+    })
+
+    it('formats resolved alert without description and alert count', () => {
+      const webhook: hooksService.AlertmanagerWebhook = {
+        version: '4',
+        status: 'resolved',
+        groupKey: 'test-group',
+        receiver: 'nextcloud-talk',
+        groupLabels: {},
+        commonLabels: {
+          alertname: 'ContainerDown',
+        },
+        commonAnnotations: {
+          summary: 'Container nginx is back up',
+        },
+        alerts: [
+          {
+            status: 'resolved',
+            labels: { alertname: 'ContainerDown' },
+            annotations: { summary: 'Container nginx is back up' },
+            startsAt: '2026-03-23T10:00:00Z',
+            endsAt: '2026-03-23T10:05:00Z',
+          },
+        ],
+      }
+
+      const message = hooksService.formatAlertmanagerMessage(webhook)
+
+      expect(message).toContain('✅ RESOLVED: ContainerDown')
+      expect(message).toContain('Summary: Container nginx is back up')
+      expect(message).not.toContain('Description:')
+      expect(message).not.toContain('Alerts:')
+      expect(message).not.toContain('(critical)')
+    })
+
+    it('handles missing optional fields', () => {
+      const webhook: hooksService.AlertmanagerWebhook = {
+        version: '4',
+        status: 'firing',
+        groupKey: 'test-group',
+        receiver: 'nextcloud-talk',
+        groupLabels: {},
+        commonLabels: {},
+        commonAnnotations: {},
+        alerts: [],
+      }
+
+      const message = hooksService.formatAlertmanagerMessage(webhook)
+
+      expect(message).toContain('🔴 FIRING: Unknown Alert')
+      expect(message).not.toContain('Summary:')
+      expect(message).not.toContain('Description:')
+      expect(message).toContain('Alerts: 0')
+    })
+
+    it('formats multiple alerts count', () => {
+      const webhook: hooksService.AlertmanagerWebhook = {
+        version: '4',
+        status: 'firing',
+        groupKey: 'test-group',
+        receiver: 'nextcloud-talk',
+        groupLabels: {},
+        commonLabels: { alertname: 'MultipleContainers' },
+        commonAnnotations: { summary: 'Multiple containers down' },
+        alerts: [
+          {
+            status: 'firing',
+            labels: { name: 'nginx' },
+            annotations: {},
+            startsAt: '2026-03-23T10:00:00Z',
+            endsAt: '0001-01-01T00:00:00Z',
+          },
+          {
+            status: 'firing',
+            labels: { name: 'apache' },
+            annotations: {},
+            startsAt: '2026-03-23T10:01:00Z',
+            endsAt: '0001-01-01T00:00:00Z',
+          },
+          {
+            status: 'firing',
+            labels: { name: 'postgres' },
+            annotations: {},
+            startsAt: '2026-03-23T10:02:00Z',
+            endsAt: '0001-01-01T00:00:00Z',
+          },
+        ],
+      }
+
+      const message = hooksService.formatAlertmanagerMessage(webhook)
+
+      expect(message).toContain('Alerts: 3')
+    })
+  })
+
+  describe('sendToNextcloudTalk', () => {
+    it('throws when Nextcloud password is not configured', async () => {
+      const { config } = await import('../config')
+      const originalPassword = config.nextcloudAdminPassword
+      
+      // Temporarily clear password to test error handling
+      ;(config as any).nextcloudAdminPassword = ''
+      
+      await expect(hooksService.sendToNextcloudTalk('test message'))
+        .rejects.toThrow('Nextcloud Talk not configured: missing NEXTCLOUD_ADMIN_PASSWORD')
+      
+      // Restore original value
+      ;(config as any).nextcloudAdminPassword = originalPassword
+    })
+  })
 })

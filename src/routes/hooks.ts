@@ -14,6 +14,25 @@ const notifySchema = z.object({
   message: z.string().min(1),
 })
 
+const alertmanagerAlertSchema = z.object({
+  status: z.string(),
+  labels: z.record(z.string()),
+  annotations: z.record(z.string()),
+  startsAt: z.string(),
+  endsAt: z.string(),
+})
+
+const alertmanagerWebhookSchema = z.object({
+  version: z.string(),
+  status: z.string(),
+  groupKey: z.string(),
+  receiver: z.string(),
+  groupLabels: z.record(z.string()),
+  commonLabels: z.record(z.string()),
+  commonAnnotations: z.record(z.string()),
+  alerts: z.array(alertmanagerAlertSchema),
+})
+
 const hookEventSchema = {
   type: 'object',
   properties: {
@@ -135,6 +154,76 @@ const hooksRoutes: FastifyPluginAsync = async (fastify) => {
     await hooksService.sendNotification(body.channel, body.message)
 
     return { sent: true, channel: body.channel }
+  })
+
+  // POST /hooks/alertmanager — receive Alertmanager webhook and forward to Nextcloud Talk
+  fastify.post('/alertmanager', {
+    schema: {
+      tags: ['Hooks'],
+      summary: 'Receive Alertmanager webhook',
+      description: 'Receives Alertmanager webhook payload and forwards formatted message to Nextcloud Talk. Optional HMAC-SHA256 signature verification via X-Webhook-Signature header if WEBHOOK_SECRET is configured.',
+      body: {
+        type: 'object',
+        properties: {
+          version: { type: 'string' },
+          status: { type: 'string' },
+          groupKey: { type: 'string' },
+          receiver: { type: 'string' },
+          groupLabels: { type: 'object', additionalProperties: { type: 'string' } },
+          commonLabels: { type: 'object', additionalProperties: { type: 'string' } },
+          commonAnnotations: { type: 'object', additionalProperties: { type: 'string' } },
+          alerts: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                status: { type: 'string' },
+                labels: { type: 'object', additionalProperties: { type: 'string' } },
+                annotations: { type: 'object', additionalProperties: { type: 'string' } },
+                startsAt: { type: 'string' },
+                endsAt: { type: 'string' },
+              },
+            },
+          },
+        },
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+          },
+        },
+        401: errorResponse,
+      },
+    },
+  }, async (request, reply) => {
+    // Optional HMAC signature verification (if webhook secret is set)
+    if (config.webhookSecret) {
+      const signature = request.headers['x-webhook-signature'] as string | undefined
+      if (!signature) {
+        reply.code(401)
+        return { error: 'Missing X-Webhook-Signature header' }
+      }
+
+      const rawBody = JSON.stringify(request.body)
+      if (!hooksService.verifySignature(rawBody, signature, config.webhookSecret)) {
+        reply.code(401)
+        return { error: 'Invalid webhook signature' }
+      }
+    }
+
+    try {
+      const body = alertmanagerWebhookSchema.parse(request.body)
+      const message = hooksService.formatAlertmanagerMessage(body)
+      await hooksService.sendToNextcloudTalk(message)
+
+      return { ok: true }
+    } catch (error) {
+      // Log errors but always return success (alertmanager will retry otherwise)
+      fastify.log.error({ error }, 'Alertmanager webhook error')
+      return { ok: true }
+    }
   })
 }
 
