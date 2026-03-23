@@ -1,5 +1,6 @@
 import { FastifyPluginAsync } from 'fastify'
 import * as docker from '../services/docker.service'
+import { errorRing } from '../lib/error-ring'
 
 const errorResponse = {
   type: 'object',
@@ -39,9 +40,20 @@ const dockerRoutes: FastifyPluginAsync = async (fastify) => {
     const cached = fastify.cache.get(cacheKey)
     if (cached) return cached
 
-    const containers = await docker.listContainers()
-    fastify.cache.set(cacheKey, containers, 10)
-    return containers
+    try {
+      const containers = await docker.listContainers()
+      fastify.cache.set(cacheKey, containers, 10)
+      return containers
+    } catch (err: any) {
+      const message = err.message?.substring(0, 500) || 'Unknown error'
+      fastify.log.error({ service: 'docker', err: message, stack: err.stack?.substring(0, 500) }, 'Docker socket call failed')
+      errorRing.add({
+        timestamp: new Date().toISOString(),
+        service: 'docker',
+        message: `listContainers failed: ${message}`,
+      })
+      throw err
+    }
   })
 
   // POST /docker/containers/:id/restart
@@ -64,9 +76,20 @@ const dockerRoutes: FastifyPluginAsync = async (fastify) => {
     },
     async (request, reply) => {
       const { id } = request.params
-      await docker.restartContainer(id)
-      fastify.cache.del('docker:containers')
-      reply.code(204)
+      try {
+        await docker.restartContainer(id)
+        fastify.cache.del('docker:containers')
+        reply.code(204)
+      } catch (err: any) {
+        const message = err.message?.substring(0, 500) || 'Unknown error'
+        fastify.log.error({ service: 'docker', err: message, container: id }, 'Docker restart failed')
+        errorRing.add({
+          timestamp: new Date().toISOString(),
+          service: 'docker',
+          message: `restartContainer(${id}) failed: ${message}`,
+        })
+        throw err
+      }
     }
   )
 
@@ -273,9 +296,20 @@ const dockerRoutes: FastifyPluginAsync = async (fastify) => {
     const cached = fastify.cache.get(cacheKey)
     if (cached) return cached
 
-    const stats = await docker.getDockerStats()
-    fastify.cache.set(cacheKey, stats, 5) // Reduced to 5s for better performance
-    return stats
+    try {
+      const stats = await docker.getDockerStats()
+      fastify.cache.set(cacheKey, stats, 5) // Reduced to 5s for better performance
+      return stats
+    } catch (err: any) {
+      const message = err.message?.substring(0, 500) || 'Unknown error'
+      fastify.log.error({ service: 'docker', err: message }, 'Docker stats call failed')
+      errorRing.add({
+        timestamp: new Date().toISOString(),
+        service: 'docker',
+        message: `getDockerStats failed: ${message}`,
+      })
+      throw err
+    }
   })
 
   // GET /docker/images — list all images

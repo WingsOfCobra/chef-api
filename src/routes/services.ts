@@ -1,6 +1,7 @@
 import { FastifyPluginAsync } from 'fastify'
 import { config } from '../config'
 import { runCommand } from '../services/ssh.service'
+import { errorRing } from '../lib/error-ring'
 
 interface ServiceStatus {
   name: string
@@ -161,14 +162,20 @@ const servicesRoutes: FastifyPluginAsync = async (fastify) => {
       const response = { services, timestamp, stale: false }
       fastify.cache.set(cacheKey, response, CACHE_TTL_S)
       return response
-    } catch (err) {
+    } catch (err: any) {
+      const message = err.message?.substring(0, 500) || 'Unknown error'
+      fastify.log.error({ service: 'ssh', err: message }, 'SSH service status call failed')
+      errorRing.add({
+        timestamp: new Date().toISOString(),
+        service: 'ssh',
+        message: `Service status check failed: ${message}`,
+      })
       // Return stale cache if available, otherwise return empty with stale flag
       const staleCache = fastify.cache.get(cacheKey)
       if (staleCache) {
         request.log.warn('Services SSH slow/timeout, returning stale cache')
         return staleCache
       }
-      fastify.log.error(err, 'Failed to fetch service status')
       return { services: [], timestamp, stale: true }
     }
   })

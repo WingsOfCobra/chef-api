@@ -1,6 +1,7 @@
 import { FastifyPluginAsync } from 'fastify'
 import { config } from '../config'
 import * as emailService from '../services/email.service'
+import { errorRing } from '../lib/error-ring'
 
 const emailSummarySchema = {
   type: 'object',
@@ -56,7 +57,14 @@ const emailRoutes: FastifyPluginAsync = async (fastify) => {
       const result = await Promise.race([emailService.getUnread(), timeoutPromise])
       fastify.cache.set(cacheKey, result, config.emailCacheTtlSeconds)
       return result
-    } catch (err) {
+    } catch (err: any) {
+      const message = err.message?.substring(0, 500) || 'Unknown error'
+      fastify.log.error({ service: 'email', err: message }, 'Email IMAP call failed')
+      errorRing.add({
+        timestamp: new Date().toISOString(),
+        service: 'email',
+        message: `getUnread failed: ${message}`,
+      })
       const staleCache = fastify.cache.get(cacheKey)
       if (staleCache) {
         request.log.warn('Email IMAP slow/timeout, returning stale cache')

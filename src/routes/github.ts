@@ -1,6 +1,7 @@
 import { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 import * as github from '../services/github.service'
+import { errorRing } from '../lib/error-ring'
 
 const repoSchema = {
   type: 'object',
@@ -100,9 +101,20 @@ const githubRoutes: FastifyPluginAsync = async (fastify) => {
     const cached = fastify.cache.get(cacheKey)
     if (cached) return cached
 
-    const repos = await github.listRepos(query.org)
-    fastify.cache.set(cacheKey, repos, 60)
-    return repos
+    try {
+      const repos = await github.listRepos(query.org)
+      fastify.cache.set(cacheKey, repos, 60)
+      return repos
+    } catch (err: any) {
+      const message = err.message?.substring(0, 500) || 'Unknown error'
+      fastify.log.error({ service: 'github', err: message, org: query.org }, 'GitHub API call failed')
+      errorRing.add({
+        timestamp: new Date().toISOString(),
+        service: 'github',
+        message: `listRepos failed: ${message}`,
+      })
+      throw err
+    }
   })
 
   // GET /github/repos/:owner/:repo — detailed repo info with languages, commits, contributors, releases
@@ -123,9 +135,20 @@ const githubRoutes: FastifyPluginAsync = async (fastify) => {
       const cached = fastify.cache.get(cacheKey)
       if (cached) return cached
 
-      const detail = await github.getDetailedRepoInfo(owner, repo)
-      fastify.cache.set(cacheKey, detail, 60)
-      return detail
+      try {
+        const detail = await github.getDetailedRepoInfo(owner, repo)
+        fastify.cache.set(cacheKey, detail, 60)
+        return detail
+      } catch (err: any) {
+        const message = err.message?.substring(0, 500) || 'Unknown error'
+        fastify.log.error({ service: 'github', err: message, repo: `${owner}/${repo}` }, 'GitHub API call failed')
+        errorRing.add({
+          timestamp: new Date().toISOString(),
+          service: 'github',
+          message: `getDetailedRepoInfo(${owner}/${repo}) failed: ${message}`,
+        })
+        throw err
+      }
     }
   )
 

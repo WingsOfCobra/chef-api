@@ -5,6 +5,7 @@ import websocket from '@fastify/websocket'
 import { config } from './config'
 import authPlugin from './plugins/auth'
 import cachePlugin from './plugins/cache'
+import errorHandlerPlugin from './middleware/error-handler'
 import githubRoutes from './routes/github'
 import dockerRoutes from './routes/docker'
 import sshRoutes from './routes/ssh'
@@ -89,6 +90,7 @@ async function build() {
   await fastify.register(websocket)
   await fastify.register(cachePlugin)
   await fastify.register(authPlugin)
+  await fastify.register(errorHandlerPlugin)
 
   // Routes
   await fastify.register(githubRoutes, { prefix: '/github' })
@@ -112,41 +114,68 @@ async function build() {
 }
 
 async function main() {
-  const fastify = await build()
+  let fastify
+  
+  try {
+    fastify = await build()
+  } catch (err) {
+    console.error('❌ Failed to build Fastify app:', err)
+    process.exit(1)
+  }
 
   try {
     await fastify.listen({ port: config.port, host: config.host })
-    
+  } catch (err) {
+    fastify.log.error({ err, port: config.port, host: config.host }, '❌ Failed to start server')
+    process.exit(1)
+  }
+
+  try {
     // Initialize cron scheduler with logger
     initScheduler(fastify.log)
     const scheduledCount = require('./services/cron-scheduler').getScheduledCount()
     fastify.log.info({ scheduledJobs: scheduledCount }, '✓ Cron scheduler initialized')
-    
+  } catch (err) {
+    fastify.log.error({ err }, '❌ Failed to initialize cron scheduler')
+  }
+
+  try {
     // Initialize log sources
     initLogSources()
     if (config.logSources.length > 0) {
       fastify.log.info({ sources: config.logSources.length, intervalSeconds: config.logIndexIntervalSeconds }, 'Log indexing enabled')
       setInterval(() => runIndexCycle(), config.logIndexIntervalSeconds * 1000)
     }
-    
+  } catch (err) {
+    fastify.log.error({ err }, '❌ Failed to initialize log sources')
+  }
+
+  try {
     // Start alert checker (every 60s)
     startAlertChecker(fastify)
-    
+  } catch (err) {
+    fastify.log.error({ err }, '❌ Failed to start alert checker')
+  }
+
+  try {
     // Start alert monitors (every 60s)
     setInterval(() => {
       checkCronFailures().catch((err) => fastify.log.error('Alert monitor - cron failures:', err))
       checkContainerExits().catch((err) => fastify.log.error('Alert monitor - container exits:', err))
     }, 60 * 1000)
+  } catch (err) {
+    fastify.log.error({ err }, '❌ Failed to start alert monitors')
+  }
 
+  try {
     // Clean up expired hook events every 6 hours
     setInterval(() => cleanupOldEvents(), 6 * 60 * 60 * 1000)
-    
-    fastify.log.info(`🍳 Chef API running at http://${config.host}:${config.port}`)
-    fastify.log.info(`📚 Swagger docs at http://${config.host}:${config.port}/docs`)
   } catch (err) {
-    fastify.log.error(err)
-    process.exit(1)
+    fastify.log.error({ err }, '❌ Failed to start hook cleanup interval')
   }
+
+  fastify.log.info(`🍳 Chef API running at http://${config.host}:${config.port}`)
+  fastify.log.info(`📚 Swagger docs at http://${config.host}:${config.port}/docs`)
 }
 
 main()
