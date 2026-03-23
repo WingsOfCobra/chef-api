@@ -23,6 +23,7 @@ import metricsRoutes from './routes/metrics'
 import { initScheduler } from './services/cron-scheduler'
 import { cleanupOldEvents } from './services/hooks.service'
 import { startAlertChecker } from './services/alert-checker'
+import { checkCronFailures, checkContainerExits } from './services/alert-monitor'
 import { initLogSources, runIndexCycle } from './services/logs.service'
 import wsRoutes from './routes/ws'
 
@@ -130,6 +131,12 @@ async function main() {
     
     // Start alert checker (every 60s)
     startAlertChecker(fastify)
+    
+    // Start alert monitors (every 60s)
+    setInterval(() => {
+      checkCronFailures().catch((err) => fastify.log.error('Alert monitor - cron failures:', err))
+      checkContainerExits().catch((err) => fastify.log.error('Alert monitor - container exits:', err))
+    }, 60 * 1000)
 
     // Clean up expired hook events every 6 hours
     setInterval(() => cleanupOldEvents(), 6 * 60 * 60 * 1000)

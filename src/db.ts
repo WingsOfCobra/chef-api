@@ -87,13 +87,36 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS alert_rules (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
-    type TEXT NOT NULL CHECK(type IN ('container_stopped','disk_usage','memory_usage','cron_failure','github_ci_failure')),
+    type TEXT NOT NULL CHECK(type IN ('container_stopped','disk_usage','memory_usage','cron_failure','github_ci_failure','cron_job_failure','container_exit','service_down')),
     target TEXT,
     threshold REAL,
     webhook_url TEXT NOT NULL,
     enabled INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  
+  -- Add severity column if it doesn't exist
+  PRAGMA defer_foreign_keys = ON;
+`)
+
+// Check if severity column exists and add it if not
+const columnCheck = db.prepare("SELECT COUNT(*) as count FROM pragma_table_info('alert_rules') WHERE name = 'severity'").get() as { count: number }
+if (columnCheck.count === 0) {
+  db.exec(`
+    ALTER TABLE alert_rules ADD COLUMN severity TEXT DEFAULT 'warning' CHECK(severity IN ('info','warning','critical'));
+  `)
+}
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS alert_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    rule_id INTEGER,
+    type TEXT,
+    target TEXT,
+    value REAL,
+    severity TEXT,
+    triggered_at TEXT DEFAULT (datetime('now'))
   );
 
   CREATE TABLE IF NOT EXISTS alert_events (
@@ -239,13 +262,24 @@ export interface AnsibleJob {
 export interface AlertRule {
   id: number
   name: string
-  type: 'container_stopped' | 'disk_usage' | 'memory_usage' | 'cron_failure' | 'github_ci_failure'
+  type: 'container_stopped' | 'disk_usage' | 'memory_usage' | 'cron_failure' | 'github_ci_failure' | 'cron_job_failure' | 'container_exit' | 'service_down'
   target: string | null
   threshold: number | null
   webhook_url: string
   enabled: number
+  severity: 'info' | 'warning' | 'critical'
   created_at: string
   updated_at: string
+}
+
+export interface AlertHistory {
+  id: number
+  rule_id: number | null
+  type: string | null
+  target: string | null
+  value: number | null
+  severity: string | null
+  triggered_at: string
 }
 
 export interface FleetServer {

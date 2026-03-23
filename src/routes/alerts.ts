@@ -8,7 +8,12 @@ const alertTypeEnum = z.enum([
   'memory_usage',
   'cron_failure',
   'github_ci_failure',
+  'cron_job_failure',
+  'container_exit',
+  'service_down',
 ])
+
+const severityEnum = z.enum(['info', 'warning', 'critical'])
 
 const createRuleSchema = z.object({
   name: z.string().min(1),
@@ -16,6 +21,7 @@ const createRuleSchema = z.object({
   target: z.string().optional(),
   threshold: z.number().optional(),
   webhook_url: z.string().url(),
+  severity: severityEnum.optional(),
 })
 
 const updateRuleSchema = z.object({
@@ -24,6 +30,7 @@ const updateRuleSchema = z.object({
   threshold: z.number().optional(),
   webhook_url: z.string().url().optional(),
   enabled: z.boolean().optional(),
+  severity: severityEnum.optional(),
 })
 
 const alertRuleResponseSchema = {
@@ -36,6 +43,7 @@ const alertRuleResponseSchema = {
     threshold: { type: ['number', 'null'] },
     webhook_url: { type: 'string' },
     enabled: { type: 'number' },
+    severity: { type: 'string' },
     created_at: { type: 'string' },
     updated_at: { type: 'string' },
   },
@@ -187,6 +195,34 @@ const alertsRoutes: FastifyPluginAsync = async (fastify) => {
     const payload = alertsService.buildPayload(rule, rule.threshold ?? 0)
     const event = await alertsService.fireWebhook(rule, payload)
     return event
+  })
+
+  // GET /alerts/history
+  fastify.get('/history', {
+    schema: {
+      tags: ['Alerts'],
+      summary: 'Get alert history',
+      description: 'Returns the last 100 alert history entries',
+      response: {
+        200: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'number' },
+              rule_id: { type: ['number', 'null'] },
+              type: { type: ['string', 'null'] },
+              target: { type: ['string', 'null'] },
+              value: { type: ['number', 'null'] },
+              severity: { type: ['string', 'null'] },
+              triggered_at: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+  }, async () => {
+    return alertsService.getAlertHistory()
   })
 }
 
