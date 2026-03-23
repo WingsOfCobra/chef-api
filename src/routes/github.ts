@@ -105,18 +105,25 @@ const githubRoutes: FastifyPluginAsync = async (fastify) => {
     return repos
   })
 
-  // GET /github/repos/:owner/:repo — detailed repo info
+  // GET /github/repos/:owner/:repo — detailed repo info with languages, commits, contributors, releases
   fastify.get<{ Params: { owner: string; repo: string } }>(
     '/repos/:owner/:repo',
-    { schema: { tags: ['GitHub'] } },
+    {
+      schema: {
+        tags: ['GitHub'],
+        summary: 'Get detailed repository information',
+        description: 'Returns comprehensive repo info including language breakdown, recent commits, top contributors, open issues/PRs count, and latest release.',
+        params: ownerRepoParams,
+      },
+    },
     async (request) => {
       const { owner, repo } = request.params
-      const cacheKey = `github:repo:${owner}/${repo}`
+      const cacheKey = `github:repo-detailed:${owner}/${repo}`
 
       const cached = fastify.cache.get(cacheKey)
       if (cached) return cached
 
-      const detail = await github.getRepoDetail(owner, repo)
+      const detail = await github.getDetailedRepoInfo(owner, repo)
       fastify.cache.set(cacheKey, detail, 60)
       return detail
     }
@@ -203,6 +210,39 @@ const githubRoutes: FastifyPluginAsync = async (fastify) => {
     }
   )
 
+  // GET /github/repos/:owner/:repo/pulls/:pull_number — detailed PR view
+  fastify.get<{ Params: { owner: string; repo: string; pull_number: string } }>(
+    '/repos/:owner/:repo/pulls/:pull_number',
+    {
+      schema: {
+        tags: ['GitHub'],
+        summary: 'Get detailed pull request information',
+        description: 'Returns comprehensive PR info including files changed, review status, CI check statuses, and diff stats.',
+        params: {
+          type: 'object',
+          properties: {
+            owner: { type: 'string' },
+            repo: { type: 'string' },
+            pull_number: { type: 'string' },
+          },
+          required: ['owner', 'repo', 'pull_number'],
+        },
+      },
+    },
+    async (request) => {
+      const { owner, repo, pull_number } = request.params
+      const pullNumber = parseInt(pull_number, 10)
+      const cacheKey = `github:pr-detail:${owner}/${repo}/${pullNumber}`
+
+      const cached = fastify.cache.get(cacheKey)
+      if (cached) return cached
+
+      const prDetail = await github.getDetailedPRInfo(owner, repo, pullNumber)
+      fastify.cache.set(cacheKey, prDetail, 60)
+      return prDetail
+    }
+  )
+
   // GET /github/repos/:owner/:repo/issues
   fastify.get<{ Params: { owner: string; repo: string } }>(
     '/repos/:owner/:repo/issues',
@@ -264,30 +304,60 @@ const githubRoutes: FastifyPluginAsync = async (fastify) => {
     }
   )
 
-  // GET /github/repos/:owner/:repo/workflows
+  // GET /github/repos/:owner/:repo/workflows — improved with duration and commit info
   fastify.get<{ Params: { owner: string; repo: string } }>(
     '/repos/:owner/:repo/workflows',
     {
       schema: {
         tags: ['GitHub'],
         summary: 'List recent workflow runs',
-        description: 'Returns recent GitHub Actions workflow runs for the specified repository.',
+        description: 'Returns recent GitHub Actions workflow runs with enhanced info: conclusion, duration, and triggering commit details.',
         params: ownerRepoParams,
-        response: {
-          200: { type: 'array', items: workflowRunSchema },
-        },
       },
     },
     async (request) => {
       const { owner, repo } = request.params
-      const cacheKey = `github:workflows:${owner}/${repo}`
+      const cacheKey = `github:workflows-enhanced:${owner}/${repo}`
 
       const cached = fastify.cache.get(cacheKey)
       if (cached) return cached
 
-      const runs = await github.listWorkflowRuns(owner, repo)
+      const runs = await github.listEnhancedWorkflowRuns(owner, repo)
       fastify.cache.set(cacheKey, runs, 60)
       return runs
+    }
+  )
+
+  // GET /github/repos/:owner/:repo/runs/:run_id/logs — workflow run logs summary
+  fastify.get<{ Params: { owner: string; repo: string; run_id: string } }>(
+    '/repos/:owner/:repo/runs/:run_id/logs',
+    {
+      schema: {
+        tags: ['GitHub'],
+        summary: 'Get workflow run logs summary',
+        description: 'Returns a summary of workflow run logs including job statuses, steps, and conclusions.',
+        params: {
+          type: 'object',
+          properties: {
+            owner: { type: 'string' },
+            repo: { type: 'string' },
+            run_id: { type: 'string' },
+          },
+          required: ['owner', 'repo', 'run_id'],
+        },
+      },
+    },
+    async (request) => {
+      const { owner, repo, run_id } = request.params
+      const runId = parseInt(run_id, 10)
+      const cacheKey = `github:run-logs:${owner}/${repo}/${runId}`
+
+      const cached = fastify.cache.get(cacheKey)
+      if (cached) return cached
+
+      const logs = await github.getWorkflowRunLogs(owner, repo, runId)
+      fastify.cache.set(cacheKey, logs, 120) // Cache longer since logs don't change
+      return logs
     }
   )
 
