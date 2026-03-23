@@ -4,9 +4,9 @@ This document tracks what's built, what's planned, and what's dreamed about for 
 
 ---
 
-## Current Status: Phase 4 Fleet Management & Secrets ✅
+## Current Status: Phase 4 Secrets & Ansible ✅
 
-Phases 1–4 are complete and merged. The API covers 14 domains: system monitoring, Docker, GitHub, email, todos, cron scheduling, log aggregation, webhooks/hooks, alerting, metrics, fleet management, Ansible playbook runner, and Bitwarden secrets vault. Test infrastructure (Vitest, 180+ tests) and CI/CD pipeline are fully operational.
+Phases 1–4 are complete and merged. The API covers 13 domains: system monitoring, Docker, GitHub, email, todos, cron scheduling, log aggregation, webhooks/hooks, alerting, metrics, Ansible playbook runner, and Bitwarden secrets vault. Test infrastructure (Vitest, 180+ tests) and CI/CD pipeline are fully operational.
 
 ---
 
@@ -127,7 +127,7 @@ Phases 1–4 are complete and merged. The API covers 14 domains: system monitori
 
 ---
 
-## Phase 4: Fleet Management & Secrets ✅
+## Phase 4: Secrets & Ansible ✅
 
 ### Ansible / Playbook Runner (`/ansible`) ✅
 - [x] `GET /ansible/playbooks` — list playbooks from configured directory
@@ -136,13 +136,6 @@ Phases 1–4 are complete and merged. The API covers 14 domains: system monitori
 - [x] `GET /ansible/jobs` — list all jobs
 - [x] `GET /ansible/inventory` — show current inventory
 - [x] Run history stored in `job_history` table
-
-### Multi-Server Fleet Management (`/fleet`) ✅
-- [x] `GET /fleet/servers` — all servers with last-seen, OS, load, disk
-- [x] `POST /fleet/servers` — add server to fleet
-- [x] `DELETE /fleet/servers/:name` — remove server
-- [x] `POST /fleet/run` — run command across all or selected servers (parallel)
-- [x] `GET /fleet/status` — health summary across fleet
 
 ### Secrets Vault — Bitwarden Integration (`/secrets`) ✅
 - [x] `GET /secrets` — list secret names (never values)
@@ -221,4 +214,4 @@ These are new chef-api domains requested by neo-dock's Phase 3 ecosystem expansi
 - **Neo-Dock contract:** `neo-dock/API-PLAN.md` — exact endpoint requirements per neo-dock phase
 - **Neo-Dock roadmap:** `neo-dock/ROADMAP.md` — what features depend on which chef-api endpoints
 
-Last updated: 2026-03-22
+Last updated: 2026-03-23

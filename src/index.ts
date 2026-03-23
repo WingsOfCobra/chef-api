@@ -19,7 +19,6 @@ import servicesRoutes from './routes/services'
 import alertsRoutes from './routes/alerts'
 import secretsRoutes from './routes/secrets'
 import ansibleRoutes from './routes/ansible'
-import fleetRoutes from './routes/fleet'
 import metricsRoutes from './routes/metrics'
 import dashboardsRoutes from './routes/dashboards'
 import { initScheduler } from './services/cron-scheduler'
@@ -73,7 +72,6 @@ async function build() {
         { name: 'Alerts', description: 'Alert rules and webhook notifications' },
         { name: 'Secrets', description: 'Bitwarden secrets vault integration' },
         { name: 'Ansible', description: 'Ansible playbook execution and job management' },
-        { name: 'Fleet', description: 'Multi-server fleet management and monitoring' },
         { name: 'Metrics', description: 'Prometheus and JSON system metrics' },
       ],
     },
@@ -155,7 +153,6 @@ async function build() {
     await fastify.register(alertsRoutes, { prefix: '/alerts' })
     await fastify.register(secretsRoutes, { prefix: '/secrets' })
     await fastify.register(ansibleRoutes, { prefix: '/ansible' })
-    await fastify.register(fleetRoutes, { prefix: '/fleet' })
     await fastify.register(wsRoutes, { prefix: '/ws' })
   }
   await fastify.register(dashboardsRoutes, { prefix: '/dashboards' })
