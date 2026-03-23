@@ -230,13 +230,13 @@ Expected output:
 
 2. **Test cron health endpoint:**
 ```bash
-curl -H "X-Chef-API-Key: $API_KEY" http://10.13.13.1:4242/cron/health | jq
+curl -H "X-Chef-API-Key: $API_KEY" http://your-server:4242/cron/health | jq
 ```
 
 3. **Monitor response times:**
 ```bash
 # Before (slow)
-time curl -H "X-Chef-API-Key: $API_KEY" http://10.13.13.1:4242/system/health
+time curl -H "X-Chef-API-Key: $API_KEY" http://your-server:4242/system/health
 # Should be <10ms after caching kicks in
 
 # First request (cache miss) - will be slow

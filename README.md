@@ -507,7 +507,7 @@ The pipeline is split into two workflows:
 | Workflow | File | Trigger |
 |----------|------|---------|
 | **Build & Push to GHCR** | `publish.yml` | Every push to `main` |
-| **Deploy to SOLCloud** | `deploy.yml` | After `publish.yml` succeeds |
+| **Deploy to Server** | `deploy.yml` | After `publish.yml` succeeds |
 
 **Flow:** push to `main` → build & push image to GHCR → SSH deploy pulls latest image.
 

@@ -11,7 +11,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${WORKSPACE_PATH:-/tmp/workspace}:/workspace:ro
     networks:
-      - solcloud
+      - chef-network
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:4242/system/health"]
       interval: 30s
@@ -20,6 +20,6 @@ services:
       start_period: 10s
 
 networks:
-  solcloud:
-    name: solcloud
+  chef-network:
+    name: chef-network
     driver: bridge
