@@ -24,10 +24,11 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
 
   // Apply auth to all routes by default via onRequest hook
   fastify.addHook('onRequest', async (request, reply) => {
-    // Skip swagger docs routes
+    // Skip swagger docs routes and public endpoints
     if (
       request.url.startsWith('/docs') ||
       request.url === '/system/health' ||
+      request.url === '/node/info' ||
       request.url === '/hooks/agent-event' ||
       request.url === '/hooks/alertmanager' ||
       request.url.startsWith('/ws/')
