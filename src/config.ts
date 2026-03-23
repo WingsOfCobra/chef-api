@@ -52,6 +52,7 @@ function parseLogSources(raw: string): LogSourceConfig[] {
 }
 
 const envSchema = z.object({
+  CHEF_NODE_MODE: z.string().default('false').transform((v) => v === 'true'),
   CHEF_API_KEY: z.string().min(1),
   GITHUB_TOKEN: z.string().optional().default(''),
   PORT: z.coerce.number().default(4242),
@@ -97,6 +98,7 @@ if (!parsed.success) {
 const env = parsed.data
 
 export const config = {
+  nodeMode: env.CHEF_NODE_MODE,
   apiKey: env.CHEF_API_KEY,
   githubToken: env.GITHUB_TOKEN,
   port: env.PORT,

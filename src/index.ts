@@ -93,22 +93,71 @@ async function build() {
   await fastify.register(authPlugin)
   await fastify.register(errorHandlerPlugin)
 
-  // Routes
-  await fastify.register(githubRoutes, { prefix: '/github' })
-  await fastify.register(dockerRoutes, { prefix: '/docker' })
-  await fastify.register(sshRoutes, { prefix: '/ssh' })
+  // Node mode filter: block disallowed routes with 503
+  if (config.nodeMode) {
+    const allowedPrefixes = ['/system', '/docker', '/services', '/metrics', '/node', '/docs']
+    fastify.addHook('onRequest', async (request, reply) => {
+      // Skip auth exempted routes (already handled by authPlugin)
+      if (request.url.startsWith('/docs') || request.url === '/system/health') {
+        return
+      }
+      // Check if route is allowed in node mode
+      const isAllowed = allowedPrefixes.some(prefix => request.url.startsWith(prefix))
+      if (!isAllowed) {
+        reply.code(503).send({ error: 'Not available in node mode' })
+      }
+    })
+  }
+
+  // Routes — always register system/docker/services/metrics (node mode allows these)
   await fastify.register(systemRoutes, { prefix: '/system' })
-  await fastify.register(todoRoutes, { prefix: '/todo' })
-  await fastify.register(cronRoutes, { prefix: '/cron' })
-  await fastify.register(hooksRoutes, { prefix: '/hooks' })
-  await fastify.register(logsRoutes, { prefix: '/logs' })
-  await fastify.register(emailRoutes, { prefix: '/email' })
+  await fastify.register(dockerRoutes, { prefix: '/docker' })
   await fastify.register(servicesRoutes, { prefix: '/services' })
-  await fastify.register(alertsRoutes, { prefix: '/alerts' })
-  await fastify.register(secretsRoutes, { prefix: '/secrets' })
-  await fastify.register(ansibleRoutes, { prefix: '/ansible' })
-  await fastify.register(fleetRoutes, { prefix: '/fleet' })
   await fastify.register(metricsRoutes, { prefix: '/metrics' })
+
+  // Node info endpoint — always available
+  fastify.get('/node/info', {
+    schema: {
+      tags: ['System'],
+      summary: 'Node information',
+      description: 'Returns node mode, version, hostname, and uptime. Always available regardless of node mode.',
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            mode: { type: 'string', enum: ['master', 'node'] },
+            version: { type: 'string' },
+            hostname: { type: 'string' },
+            uptime: { type: 'number' },
+          },
+        },
+      },
+    },
+  }, async () => {
+    const os = require('os')
+    return {
+      mode: config.nodeMode ? 'node' : 'master',
+      version: '0.1.0',
+      hostname: os.hostname(),
+      uptime: os.uptime(),
+    }
+  })
+
+  // Master-only routes
+  if (!config.nodeMode) {
+    await fastify.register(githubRoutes, { prefix: '/github' })
+    await fastify.register(sshRoutes, { prefix: '/ssh' })
+    await fastify.register(todoRoutes, { prefix: '/todo' })
+    await fastify.register(cronRoutes, { prefix: '/cron' })
+    await fastify.register(hooksRoutes, { prefix: '/hooks' })
+    await fastify.register(logsRoutes, { prefix: '/logs' })
+    await fastify.register(emailRoutes, { prefix: '/email' })
+    await fastify.register(alertsRoutes, { prefix: '/alerts' })
+    await fastify.register(secretsRoutes, { prefix: '/secrets' })
+    await fastify.register(ansibleRoutes, { prefix: '/ansible' })
+    await fastify.register(fleetRoutes, { prefix: '/fleet' })
+    await fastify.register(wsRoutes, { prefix: '/ws' })
+  }
   await fastify.register(dashboardsRoutes, { prefix: '/dashboards' })
   await fastify.register(wsRoutes, { prefix: '/ws' })
 
@@ -132,52 +181,66 @@ async function main() {
     process.exit(1)
   }
 
-  try {
-    // Initialize cron scheduler with logger
-    initScheduler(fastify.log)
-    const scheduledCount = require('./services/cron-scheduler').getScheduledCount()
-    fastify.log.info({ scheduledJobs: scheduledCount }, '✓ Cron scheduler initialized')
-  } catch (err) {
-    fastify.log.error({ err }, '❌ Failed to initialize cron scheduler')
-  }
-
-  try {
-    // Initialize log sources
-    initLogSources()
-    if (config.logSources.length > 0) {
-      fastify.log.info({ sources: config.logSources.length, intervalSeconds: config.logIndexIntervalSeconds }, 'Log indexing enabled')
-      setInterval(() => runIndexCycle(), config.logIndexIntervalSeconds * 1000)
-    }
-  } catch (err) {
-    fastify.log.error({ err }, '❌ Failed to initialize log sources')
-  }
-
-  try {
-    // Start alert checker (every 60s)
-    startAlertChecker(fastify)
-  } catch (err) {
-    fastify.log.error({ err }, '❌ Failed to start alert checker')
-  }
-
-  try {
-    // Start alert monitors (every 60s)
-    setInterval(() => {
-      checkCronFailures().catch((err) => fastify.log.error('Alert monitor - cron failures:', err))
-      checkContainerExits().catch((err) => fastify.log.error('Alert monitor - container exits:', err))
-    }, 60 * 1000)
-  } catch (err) {
-    fastify.log.error({ err }, '❌ Failed to start alert monitors')
-  }
-
-  try {
-    // Clean up expired hook events every 6 hours
-    setInterval(() => cleanupOldEvents(), 6 * 60 * 60 * 1000)
-  } catch (err) {
-    fastify.log.error({ err }, '❌ Failed to start hook cleanup interval')
-  }
-
+  // Startup banner
   fastify.log.info(`🍳 Chef API running at http://${config.host}:${config.port}`)
   fastify.log.info(`📚 Swagger docs at http://${config.host}:${config.port}/docs`)
+  
+  if (config.nodeMode) {
+    fastify.log.info('[chef-node] Running in NODE mode — only metrics endpoints active')
+  } else {
+    fastify.log.info('[chef-api] Running in MASTER mode — full API active')
+  }
+
+  // Master-only background services
+  if (!config.nodeMode) {
+    try {
+      // Initialize cron scheduler with logger
+      initScheduler(fastify.log)
+      const scheduledCount = require('./services/cron-scheduler').getScheduledCount()
+      fastify.log.info({ scheduledJobs: scheduledCount }, '✓ Cron scheduler initialized')
+    } catch (err) {
+      fastify.log.error({ err }, '❌ Failed to initialize cron scheduler')
+    }
+
+    try {
+      // Initialize log sources
+      initLogSources()
+      if (config.logSources.length > 0) {
+        fastify.log.info({ sources: config.logSources.length, intervalSeconds: config.logIndexIntervalSeconds }, 'Log indexing enabled')
+        setInterval(() => runIndexCycle(), config.logIndexIntervalSeconds * 1000)
+      }
+    } catch (err) {
+      fastify.log.error({ err }, '❌ Failed to initialize log sources')
+    }
+
+    try {
+      // Start alert checker (every 60s)
+      startAlertChecker(fastify)
+    } catch (err) {
+      fastify.log.error({ err }, '❌ Failed to start alert checker')
+    }
+
+    try {
+      // Start alert monitors (every 60s)
+      setInterval(() => {
+        checkCronFailures().catch((err) => fastify.log.error('Alert monitor - cron failures:', err))
+        checkContainerExits().catch((err) => fastify.log.error('Alert monitor - container exits:', err))
+      }, 60 * 1000)
+    } catch (err) {
+      fastify.log.error({ err }, '❌ Failed to start alert monitors')
+    }
+
+    try {
+      // Clean up expired hook events every 6 hours
+      setInterval(() => cleanupOldEvents(), 6 * 60 * 60 * 1000)
+    } catch (err) {
+      fastify.log.error({ err }, '❌ Failed to start hook cleanup interval')
+    }
+  } else {
+    fastify.log.info('[chef-node] Skipping cron scheduler initialization')
+    fastify.log.info('[chef-node] Skipping alert checker')
+    fastify.log.info('[chef-node] Skipping log indexing')
+  }
 }
 
 main()
