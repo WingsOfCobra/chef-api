@@ -116,6 +116,55 @@ const cronRoutes: FastifyPluginAsync = async (fastify) => {
     }
   })
 
+  // PATCH /cron/jobs/:id — update a job
+  fastify.patch<{ Params: { id: string } }>('/jobs/:id', {
+    schema: {
+      tags: ['Cron'],
+      summary: 'Update a cron job',
+      description: 'Updates an existing cron job. Accepts partial updates for name, schedule, enabled, or config fields.',
+      params: {
+        type: 'object',
+        properties: { id: { type: 'string' } },
+        required: ['id'],
+      },
+      body: {
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+          schedule: { type: 'string' },
+          enabled: { type: 'boolean' },
+          config: { type: 'object', additionalProperties: true },
+        },
+      },
+      response: {
+        200: cronJobSchema,
+        404: errorResponse,
+      },
+    },
+  }, async (request, reply) => {
+    const id = parseInt(request.params.id, 10)
+    const body = request.body as { name?: string; schedule?: string; enabled?: boolean; config?: Record<string, unknown> }
+
+    const updated = cronService.updateJob(id, body)
+    if (!updated) {
+      reply.code(404)
+      return { error: 'Not found' }
+    }
+
+    // Remove from scheduler and re-add with updated config
+    scheduler.removeFromScheduler(id)
+    scheduler.addToScheduler(updated)
+
+    // Invalidate cache
+    fastify.cache.delPattern('cron:%')
+
+    return {
+      ...updated,
+      config: JSON.parse(updated.config),
+      nextRun: updated.enabled ? scheduler.getNextRun(updated.id)?.toISOString() ?? null : null,
+    }
+  })
+
   // DELETE /cron/jobs/:id — remove a job
   fastify.delete<{ Params: { id: string } }>('/jobs/:id', {
     schema: {

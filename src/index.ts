@@ -21,6 +21,7 @@ import secretsRoutes from './routes/secrets'
 import ansibleRoutes from './routes/ansible'
 import fleetRoutes from './routes/fleet'
 import metricsRoutes from './routes/metrics'
+import dashboardsRoutes from './routes/dashboards'
 import { initScheduler } from './services/cron-scheduler'
 import { cleanupOldEvents } from './services/hooks.service'
 import { startAlertChecker } from './services/alert-checker'
@@ -157,6 +158,8 @@ async function build() {
     await fastify.register(fleetRoutes, { prefix: '/fleet' })
     await fastify.register(wsRoutes, { prefix: '/ws' })
   }
+  await fastify.register(dashboardsRoutes, { prefix: '/dashboards' })
+  await fastify.register(wsRoutes, { prefix: '/ws' })
 
   return fastify
 }
