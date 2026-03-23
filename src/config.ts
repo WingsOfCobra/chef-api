@@ -80,6 +80,10 @@ const envSchema = z.object({
   BW_CLI_PATH: z.string().default('bw'),
   ANSIBLE_PLAYBOOK_DIR: z.string().default(''),
   ANSIBLE_INVENTORY: z.string().default(''),
+  NEXTCLOUD_URL: z.string().default('https://sollingers.de'),
+  NEXTCLOUD_ADMIN_USER: z.string().default('admin'),
+  NEXTCLOUD_ADMIN_PASSWORD: z.string().default(''),
+  NEXTCLOUD_TALK_ROOM_TOKEN: z.string().default('3vh5npz7'),
 })
 
 const parsed = envSchema.safeParse(process.env)
@@ -121,6 +125,10 @@ export const config = {
   bwCliPath: env.BW_CLI_PATH,
   ansiblePlaybookDir: env.ANSIBLE_PLAYBOOK_DIR,
   ansibleInventory: env.ANSIBLE_INVENTORY,
+  nextcloudUrl: env.NEXTCLOUD_URL,
+  nextcloudAdminUser: env.NEXTCLOUD_ADMIN_USER,
+  nextcloudAdminPassword: env.NEXTCLOUD_ADMIN_PASSWORD,
+  nextcloudTalkRoomToken: env.NEXTCLOUD_TALK_ROOM_TOKEN,
 }
 
 export type Config = typeof config
