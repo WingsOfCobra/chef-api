@@ -96,6 +96,49 @@ const dockerRoutes: FastifyPluginAsync = async (fastify) => {
     }
   )
 
+  // DELETE /docker/containers/:id
+  fastify.delete<{ Params: { id: string } }>(
+    '/containers/:id',
+    {
+      schema: {
+        tags: ['Docker'],
+        summary: 'Remove a container',
+        description: 'Removes the specified container by ID or name. Container must be stopped first.',
+        params: {
+          type: 'object',
+          properties: { id: { type: 'string' } },
+          required: ['id'],
+        },
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              message: { type: 'string' },
+            },
+          },
+          404: errorResponse,
+          409: errorResponse,
+        },
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params
+      try {
+        await docker.removeContainer(id)
+        fastify.cache.delPattern('docker:*')
+        reply.code(200).send({ message: 'Container removed' })
+      } catch (err: any) {
+        if (err.statusCode === 404) {
+          reply.code(404).send({ error: 'Container not found' })
+        } else if (err.statusCode === 409) {
+          reply.code(409).send({ error: err.message })
+        } else {
+          throw err
+        }
+      }
+    }
+  )
+
   // GET /docker/containers/:id/logs
   fastify.get<{ Params: { id: string } }>(
     '/containers/:id/logs',
