@@ -1,5 +1,6 @@
 import { FastifyPluginAsync } from 'fastify'
 import * as system from '../services/system.service'
+import { errorRing } from '../lib/error-ring'
 
 const systemRoutes: FastifyPluginAsync = async (fastify) => {
   // GET /system/health — public, no auth required (handled in auth plugin)
@@ -8,7 +9,7 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
     schema: {
       tags: ['System'],
       summary: 'Get system health, memory, and uptime',
-      description: 'Returns current system status including CPU usage, memory usage, network bytes, load averages, and uptime. This endpoint does not require authentication.',
+      description: 'Returns current system status including CPU usage, memory usage, network bytes, load averages, uptime, and recent errors. This endpoint does not require authentication.',
       response: {
         200: {
           type: 'object',
@@ -44,6 +45,20 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
             },
             loadAvg: { type: 'array', items: { type: 'number' } },
             timestamp: { type: 'string' },
+            recentErrors: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  timestamp: { type: 'string' },
+                  service: { type: 'string' },
+                  message: { type: 'string' },
+                  statusCode: { type: 'number' },
+                  method: { type: 'string' },
+                  url: { type: 'string' },
+                },
+              },
+            },
           },
         },
       },
@@ -54,8 +69,10 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
     if (cached) return cached
 
     const health = await system.getHealth()
-    fastify.cache.set(cacheKey, health, 5) // 5s TTL
-    return health
+    const recentErrors = errorRing.getRecent()
+    const healthWithErrors = { ...health, recentErrors }
+    fastify.cache.set(cacheKey, healthWithErrors, 5) // 5s TTL
+    return healthWithErrors
   })
 
   // GET /system/disk
