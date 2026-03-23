@@ -15,6 +15,76 @@ const mockBranches = [{ name: 'main', protected: true, sha: 'abc123' }]
 const mockCommits = [{ sha: 'abc123', message: 'init', author: 'dev', date: '2025-01-01', url: 'https://github.com' }]
 const mockReleases = [{ id: 1, tagName: 'v1.0.0', name: 'First', draft: false, prerelease: false, createdAt: '2025-01-01', publishedAt: '2025-01-01', author: 'dev', url: 'https://github.com' }]
 
+const mockDetailedRepoInfo = {
+  name: 'chef-api',
+  fullName: 'user/chef-api',
+  description: 'API',
+  stars: 10,
+  forks: 3,
+  watchers: 8,
+  openIssues: 5,
+  openPRs: 2,
+  defaultBranch: 'main',
+  language: 'TypeScript',
+  url: 'https://github.com/user/chef-api',
+  private: false,
+  languages: { TypeScript: 8000, JavaScript: 2000 },
+  recentCommits: mockCommits,
+  topContributors: [{ login: 'dev1', contributions: 50, avatarUrl: 'https://github.com/dev1.png' }],
+  latestRelease: mockReleases[0],
+}
+
+const mockDetailedPRInfo = {
+  number: 1,
+  title: 'Add feature',
+  body: 'PR description',
+  author: 'dev',
+  state: 'open',
+  draft: false,
+  createdAt: '2025-01-01',
+  updatedAt: '2025-01-02',
+  mergedAt: null,
+  url: 'https://github.com/user/repo/pull/1',
+  filesChanged: 5,
+  additions: 100,
+  deletions: 20,
+  commits: 3,
+  reviewStatus: { approved: 1, changesRequested: 0, commented: 0, pending: 0 },
+  ciStatus: { conclusion: 'success', checks: [{ name: 'CI', conclusion: 'success', status: 'completed' }] },
+}
+
+const mockWorkflowRunLogs = {
+  runId: 123,
+  runName: 'CI',
+  status: 'completed',
+  conclusion: 'success',
+  jobs: [
+    {
+      id: 1,
+      name: 'build',
+      status: 'completed',
+      conclusion: 'success',
+      startedAt: '2025-01-01T10:00:00Z',
+      completedAt: '2025-01-01T10:05:00Z',
+      steps: [{ name: 'Checkout', status: 'completed', conclusion: 'success', number: 1 }],
+    },
+  ],
+}
+
+const mockEnhancedWorkflowRuns = [
+  {
+    id: 123,
+    name: 'CI',
+    status: 'completed',
+    conclusion: 'success',
+    createdAt: '2025-01-01T10:00:00Z',
+    url: 'https://github.com/user/repo/actions/runs/123',
+    branch: 'main',
+    duration: 300,
+    triggeringCommit: { sha: 'abc123', message: 'init', author: 'dev' },
+  },
+]
+
 vi.mock('../services/github.service', () => ({
   listRepos: vi.fn(async () => mockRepos),
   listPRs: vi.fn(async () => []),
@@ -26,6 +96,10 @@ vi.mock('../services/github.service', () => ({
   listBranches: vi.fn(async () => mockBranches),
   listCommits: vi.fn(async () => mockCommits),
   listReleases: vi.fn(async () => mockReleases),
+  getDetailedRepoInfo: vi.fn(async () => mockDetailedRepoInfo),
+  getDetailedPRInfo: vi.fn(async () => mockDetailedPRInfo),
+  getWorkflowRunLogs: vi.fn(async () => mockWorkflowRunLogs),
+  listEnhancedWorkflowRuns: vi.fn(async () => mockEnhancedWorkflowRuns),
 }))
 
 import githubRoutes from './github'
@@ -114,23 +188,91 @@ describe('github routes', () => {
 
   // --- New endpoint tests ---
 
-  it('GET /github/repos/:owner/:repo returns repo detail', async () => {
+  it('GET /github/repos/:owner/:repo returns detailed repo info', async () => {
     const res = await app.inject({
       method: 'GET',
       url: '/github/repos/user/chef-api',
       headers: authHeaders(),
     })
     expect(res.statusCode).toBe(200)
-    expect(res.json().name).toBe('chef-api')
-    expect(res.json().language).toBe('TypeScript')
-    expect(res.json().topics).toEqual(['api'])
-    expect(vi.mocked(github.getRepoDetail)).toHaveBeenCalledWith('user', 'chef-api')
+    const data = res.json()
+    expect(data.name).toBe('chef-api')
+    expect(data.language).toBe('TypeScript')
+    expect(data.languages).toEqual({ TypeScript: 8000, JavaScript: 2000 })
+    expect(data.recentCommits).toHaveLength(1)
+    expect(data.topContributors).toHaveLength(1)
+    expect(data.latestRelease.tagName).toBe('v1.0.0')
+    expect(vi.mocked(github.getDetailedRepoInfo)).toHaveBeenCalledWith('user', 'chef-api')
   })
 
   it('GET /github/repos/:owner/:repo caches on second call', async () => {
     await app.inject({ method: 'GET', url: '/github/repos/user/chef-api', headers: authHeaders() })
     await app.inject({ method: 'GET', url: '/github/repos/user/chef-api', headers: authHeaders() })
-    expect(vi.mocked(github.getRepoDetail)).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(github.getDetailedRepoInfo)).toHaveBeenCalledTimes(1)
+  })
+
+  it('GET /github/repos/:owner/:repo/pulls/:pull_number returns detailed PR info', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/github/repos/user/repo/pulls/1',
+      headers: authHeaders(),
+    })
+    expect(res.statusCode).toBe(200)
+    const data = res.json()
+    expect(data.number).toBe(1)
+    expect(data.filesChanged).toBe(5)
+    expect(data.additions).toBe(100)
+    expect(data.deletions).toBe(20)
+    expect(data.reviewStatus.approved).toBe(1)
+    expect(data.ciStatus.conclusion).toBe('success')
+    expect(vi.mocked(github.getDetailedPRInfo)).toHaveBeenCalledWith('user', 'repo', 1)
+  })
+
+  it('GET /github/repos/:owner/:repo/pulls/:pull_number caches on second call', async () => {
+    await app.inject({ method: 'GET', url: '/github/repos/user/repo/pulls/1', headers: authHeaders() })
+    await app.inject({ method: 'GET', url: '/github/repos/user/repo/pulls/1', headers: authHeaders() })
+    expect(vi.mocked(github.getDetailedPRInfo)).toHaveBeenCalledTimes(1)
+  })
+
+  it('GET /github/repos/:owner/:repo/runs/:run_id/logs returns workflow run logs', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/github/repos/user/repo/runs/123/logs',
+      headers: authHeaders(),
+    })
+    expect(res.statusCode).toBe(200)
+    const data = res.json()
+    expect(data.runId).toBe(123)
+    expect(data.jobs).toHaveLength(1)
+    expect(data.jobs[0].name).toBe('build')
+    expect(data.jobs[0].steps).toHaveLength(1)
+    expect(vi.mocked(github.getWorkflowRunLogs)).toHaveBeenCalledWith('user', 'repo', 123)
+  })
+
+  it('GET /github/repos/:owner/:repo/runs/:run_id/logs caches on second call', async () => {
+    await app.inject({ method: 'GET', url: '/github/repos/user/repo/runs/123/logs', headers: authHeaders() })
+    await app.inject({ method: 'GET', url: '/github/repos/user/repo/runs/123/logs', headers: authHeaders() })
+    expect(vi.mocked(github.getWorkflowRunLogs)).toHaveBeenCalledTimes(1)
+  })
+
+  it('GET /github/repos/:owner/:repo/workflows returns enhanced workflow runs', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/github/repos/user/repo/workflows',
+      headers: authHeaders(),
+    })
+    expect(res.statusCode).toBe(200)
+    const data = res.json()
+    expect(data).toHaveLength(1)
+    expect(data[0].duration).toBe(300)
+    expect(data[0].triggeringCommit.sha).toBe('abc123')
+    expect(vi.mocked(github.listEnhancedWorkflowRuns)).toHaveBeenCalledWith('user', 'repo')
+  })
+
+  it('GET /github/repos/:owner/:repo/workflows caches on second call', async () => {
+    await app.inject({ method: 'GET', url: '/github/repos/user/repo/workflows', headers: authHeaders() })
+    await app.inject({ method: 'GET', url: '/github/repos/user/repo/workflows', headers: authHeaders() })
+    expect(vi.mocked(github.listEnhancedWorkflowRuns)).toHaveBeenCalledTimes(1)
   })
 
   it('GET /github/repos/:owner/:repo/branches returns branches', async () => {

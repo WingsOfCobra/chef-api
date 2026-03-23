@@ -109,6 +109,82 @@ export interface Notification {
   updatedAt: string
 }
 
+export interface DetailedRepoInfo {
+  name: string
+  fullName: string
+  description: string | null
+  stars: number
+  forks: number
+  watchers: number
+  openIssues: number
+  openPRs: number
+  defaultBranch: string
+  language: string | null
+  url: string
+  private: boolean
+  languages: { [key: string]: number }
+  recentCommits: CommitSummary[]
+  topContributors: { login: string; contributions: number; avatarUrl: string }[]
+  latestRelease: ReleaseSummary | null
+}
+
+export interface DetailedPRInfo {
+  number: number
+  title: string
+  body: string | null
+  author: string
+  state: string
+  draft: boolean
+  createdAt: string
+  updatedAt: string
+  mergedAt: string | null
+  url: string
+  filesChanged: number
+  additions: number
+  deletions: number
+  commits: number
+  reviewStatus: {
+    approved: number
+    changesRequested: number
+    commented: number
+    pending: number
+  }
+  ciStatus: {
+    conclusion: string | null
+    checks: { name: string; conclusion: string | null; status: string }[]
+  }
+}
+
+export interface WorkflowRunLogs {
+  runId: number
+  runName: string
+  status: string | null
+  conclusion: string | null
+  jobs: {
+    id: number
+    name: string
+    status: string
+    conclusion: string | null
+    startedAt: string
+    completedAt: string | null
+    steps: {
+      name: string
+      status: string
+      conclusion: string | null
+      number: number
+    }[]
+  }[]
+}
+
+export interface EnhancedWorkflowRun extends WorkflowRun {
+  duration: number | null
+  triggeringCommit: {
+    sha: string
+    message: string
+    author: string
+  } | null
+}
+
 export async function listRepos(org?: string): Promise<RepoSummary[]> {
   const octokit = getOctokit()
 
@@ -384,4 +460,208 @@ export async function listNotifications(): Promise<Notification[]> {
     url: n.subject.url ?? '',
     updatedAt: n.updated_at,
   }))
+}
+
+export async function getDetailedRepoInfo(owner: string, repo: string): Promise<DetailedRepoInfo> {
+  const octokit = getOctokit()
+
+  // Fetch repo info, languages, commits, contributors, and PRs in parallel
+  const [repoData, languagesData, commitsData, contributorsData, prsData, releasesData] = await Promise.all([
+    octokit.repos.get({ owner, repo }),
+    octokit.repos.listLanguages({ owner, repo }),
+    octokit.repos.listCommits({ owner, repo, per_page: 5 }),
+    octokit.repos.listContributors({ owner, repo, per_page: 5 }),
+    octokit.pulls.list({ owner, repo, state: 'open', per_page: 1 }),
+    octokit.repos.listReleases({ owner, repo, per_page: 1 }).catch(() => ({ data: [] })),
+  ])
+
+  const recentCommits: CommitSummary[] = commitsData.data.map((c) => ({
+    sha: c.sha,
+    message: c.commit.message.split('\n')[0],
+    author: c.author?.login ?? c.commit.author?.name ?? 'unknown',
+    date: c.commit.author?.date ?? '',
+    url: c.html_url,
+  }))
+
+  const topContributors = contributorsData.data.map((c) => ({
+    login: c.login ?? 'unknown',
+    contributions: c.contributions,
+    avatarUrl: c.avatar_url ?? '',
+  }))
+
+  const latestRelease = releasesData.data.length > 0
+    ? {
+        id: releasesData.data[0].id,
+        tagName: releasesData.data[0].tag_name,
+        name: releasesData.data[0].name ?? null,
+        draft: releasesData.data[0].draft,
+        prerelease: releasesData.data[0].prerelease,
+        createdAt: releasesData.data[0].created_at,
+        publishedAt: releasesData.data[0].published_at ?? null,
+        author: releasesData.data[0].author?.login ?? 'unknown',
+        url: releasesData.data[0].html_url,
+      }
+    : null
+
+  return {
+    name: repoData.data.name,
+    fullName: repoData.data.full_name,
+    description: repoData.data.description ?? null,
+    stars: repoData.data.stargazers_count ?? 0,
+    forks: repoData.data.forks_count ?? 0,
+    watchers: repoData.data.watchers_count ?? 0,
+    openIssues: repoData.data.open_issues_count ?? 0,
+    openPRs: prsData.data.length,
+    defaultBranch: repoData.data.default_branch ?? 'main',
+    language: repoData.data.language ?? null,
+    url: repoData.data.html_url,
+    private: repoData.data.private,
+    languages: languagesData.data,
+    recentCommits,
+    topContributors,
+    latestRelease,
+  }
+}
+
+export async function getDetailedPRInfo(owner: string, repo: string, pullNumber: number): Promise<DetailedPRInfo> {
+  const octokit = getOctokit()
+
+  // Fetch PR info, reviews, and checks in parallel
+  const [prData, reviewsData, checksData] = await Promise.all([
+    octokit.pulls.get({ owner, repo, pull_number: pullNumber }),
+    octokit.pulls.listReviews({ owner, repo, pull_number: pullNumber }),
+    octokit.checks.listForRef({ owner, repo, ref: '', per_page: 100 }).catch(() => ({ data: { check_runs: [] } })),
+  ])
+
+  // Get the actual HEAD SHA for checks
+  const headSha = prData.data.head.sha
+  const actualChecksData = await octokit.checks.listForRef({
+    owner,
+    repo,
+    ref: headSha,
+    per_page: 100,
+  }).catch(() => ({ data: { check_runs: [] } }))
+
+  // Count review statuses
+  const reviewStatus = {
+    approved: reviewsData.data.filter(r => r.state === 'APPROVED').length,
+    changesRequested: reviewsData.data.filter(r => r.state === 'CHANGES_REQUESTED').length,
+    commented: reviewsData.data.filter(r => r.state === 'COMMENTED').length,
+    pending: reviewsData.data.filter(r => r.state === 'PENDING').length,
+  }
+
+  // CI status
+  const checks = actualChecksData.data.check_runs.map(c => ({
+    name: c.name,
+    conclusion: c.conclusion,
+    status: c.status,
+  }))
+
+  let conclusion: string | null = null
+  if (checks.length > 0) {
+    if (checks.some(c => c.conclusion === 'failure')) conclusion = 'failure'
+    else if (checks.every(c => c.conclusion === 'success')) conclusion = 'success'
+    else if (checks.some(c => c.status === 'in_progress')) conclusion = 'pending'
+  }
+
+  return {
+    number: prData.data.number,
+    title: prData.data.title,
+    body: prData.data.body ?? null,
+    author: prData.data.user?.login ?? 'unknown',
+    state: prData.data.state,
+    draft: prData.data.draft ?? false,
+    createdAt: prData.data.created_at,
+    updatedAt: prData.data.updated_at,
+    mergedAt: prData.data.merged_at ?? null,
+    url: prData.data.html_url,
+    filesChanged: prData.data.changed_files ?? 0,
+    additions: prData.data.additions ?? 0,
+    deletions: prData.data.deletions ?? 0,
+    commits: prData.data.commits ?? 0,
+    reviewStatus,
+    ciStatus: { conclusion, checks },
+  }
+}
+
+export async function getWorkflowRunLogs(owner: string, repo: string, runId: number): Promise<WorkflowRunLogs> {
+  const octokit = getOctokit()
+
+  // Fetch the workflow run and its jobs
+  const [runData, jobsData] = await Promise.all([
+    octokit.actions.getWorkflowRun({ owner, repo, run_id: runId }),
+    octokit.actions.listJobsForWorkflowRun({ owner, repo, run_id: runId }),
+  ])
+
+  const jobs = jobsData.data.jobs.map(job => ({
+    id: job.id,
+    name: job.name,
+    status: job.status,
+    conclusion: job.conclusion ?? null,
+    startedAt: job.started_at,
+    completedAt: job.completed_at ?? null,
+    steps: job.steps?.map(step => ({
+      name: step.name,
+      status: step.status,
+      conclusion: step.conclusion ?? null,
+      number: step.number,
+    })) ?? [],
+  }))
+
+  return {
+    runId: runData.data.id,
+    runName: runData.data.name ?? '',
+    status: runData.data.status,
+    conclusion: runData.data.conclusion ?? null,
+    jobs,
+  }
+}
+
+export async function listEnhancedWorkflowRuns(owner: string, repo: string): Promise<EnhancedWorkflowRun[]> {
+  const octokit = getOctokit()
+  const { data } = await octokit.actions.listWorkflowRunsForRepo({
+    owner,
+    repo,
+    per_page: 20,
+  })
+
+  const enhancedRuns = await Promise.all(data.workflow_runs.map(async (r) => {
+    // Calculate duration if run is completed
+    let duration: number | null = null
+    if (r.updated_at && r.created_at) {
+      const created = new Date(r.created_at).getTime()
+      const updated = new Date(r.updated_at).getTime()
+      duration = Math.round((updated - created) / 1000) // seconds
+    }
+
+    // Fetch triggering commit info
+    let triggeringCommit: { sha: string; message: string; author: string } | null = null
+    if (r.head_sha) {
+      try {
+        const commitData = await octokit.repos.getCommit({ owner, repo, ref: r.head_sha })
+        triggeringCommit = {
+          sha: commitData.data.sha,
+          message: commitData.data.commit.message.split('\n')[0],
+          author: commitData.data.author?.login ?? commitData.data.commit.author?.name ?? 'unknown',
+        }
+      } catch {
+        // If commit fetch fails, just set basic info
+        triggeringCommit = { sha: r.head_sha, message: '', author: '' }
+      }
+    }
+
+    return {
+      id: r.id,
+      name: r.name ?? '',
+      status: r.status,
+      conclusion: r.conclusion ?? null,
+      createdAt: r.created_at,
+      url: r.html_url,
+      branch: r.head_branch ?? '',
+      duration,
+      triggeringCommit,
+    }
+  }))
+
+  return enhancedRuns
 }
