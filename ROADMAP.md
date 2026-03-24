@@ -4,9 +4,9 @@ This document tracks what's built, what's planned, and what's dreamed about for 
 
 ---
 
-## Current Status: Phase 4 Fleet Management & Ansible ✅
+## Current Status: Phase 4 Ansible ✅
 
-Phases 1–4 are complete and merged. The API covers 12 domains: system monitoring, Docker, GitHub, email, todos, cron scheduling, log aggregation, webhooks/hooks, alerting, metrics, fleet management, and Ansible playbook runner. Test infrastructure (Vitest, 180+ tests) and CI/CD pipeline are fully operational.
+Phases 1–4 are complete and merged. The API covers 12 domains: system monitoring, Docker, GitHub, email, todos, cron scheduling, log aggregation, webhooks/hooks, alerting, metrics and Ansible playbook runner. Test infrastructure (Vitest, 180+ tests) and CI/CD pipeline are fully operational.
 
 ---
 
@@ -127,7 +127,7 @@ Phases 1–4 are complete and merged. The API covers 12 domains: system monitori
 
 ---
 
-## Phase 4: Fleet Management & Ansible ✅
+## Phase 4: Ansible ✅
 
 ### Ansible / Playbook Runner (`/ansible`) ✅
 - [x] `GET /ansible/playbooks` — list playbooks from configured directory

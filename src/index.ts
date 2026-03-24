@@ -18,7 +18,6 @@ import emailRoutes from './routes/email'
 import servicesRoutes from './routes/services'
 import alertsRoutes from './routes/alerts'
 import ansibleRoutes from './routes/ansible'
-import fleetRoutes from './routes/fleet'
 import metricsRoutes from './routes/metrics'
 import dashboardsRoutes from './routes/dashboards'
 import { initScheduler } from './services/cron-scheduler'
@@ -71,7 +70,6 @@ async function build() {
         { name: 'Services', description: 'Systemd service monitoring' },
         { name: 'Alerts', description: 'Alert rules and webhook notifications' },
         { name: 'Ansible', description: 'Ansible playbook execution and job management' },
-        { name: 'Fleet', description: 'Multi-server fleet management and monitoring' },
         { name: 'Metrics', description: 'Prometheus and JSON system metrics' },
       ],
     },
