@@ -32,3 +32,98 @@ jobs:
             docker compose down
             docker compose up -d
             docker image prune -f
+
+  deploy-zartmann:
+    name: Deploy chef-node to zartmann
+    runs-on: ubuntu-latest
+    needs: deploy
+    steps:
+      - name: Deploy chef-node via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 89.58.37.253
+          username: cobra
+          key: ${{ secrets.ZARTMANN_SSH_KEY }}
+          script: |
+            mkdir -p ~/chef-api
+            cat > ~/chef-api/docker-compose.yml << 'EOF'
+            services:
+              chef-api:
+                image: ghcr.io/wingsofcobra/chef-api:latest
+                container_name: chef-api
+                ports:
+                  - "4242:4242"
+                env_file: .env
+                restart: unless-stopped
+                volumes:
+                  - ./data:/app/data
+                  - /var/run/docker.sock:/var/run/docker.sock
+                healthcheck:
+                  test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4242/system/health"]
+                  interval: 30s
+                  timeout: 5s
+                  retries: 3
+                  start_period: 10s
+            EOF
+            # Ensure .env has CHEF_NODE_MODE=true
+            if [ -f ~/chef-api/.env ]; then
+              grep -q "CHEF_NODE_MODE" ~/chef-api/.env && sed -i 's/CHEF_NODE_MODE=.*/CHEF_NODE_MODE=true/' ~/chef-api/.env || echo "CHEF_NODE_MODE=true" >> ~/chef-api/.env
+            else
+              echo "CHEF_NODE_MODE=true" > ~/chef-api/.env
+              echo "PORT=4242" >> ~/chef-api/.env
+              echo "HOST=0.0.0.0" >> ~/chef-api/.env
+              echo "DOCKER_SOCKET=/var/run/docker.sock" >> ~/chef-api/.env
+            fi
+            cd ~/chef-api
+            docker compose pull
+            docker compose down
+            docker compose up -d
+            docker image prune -f
+            echo "chef-node deployed to zartmann"
+
+  deploy-schrombus:
+    name: Deploy chef-node to schrombus
+    runs-on: ubuntu-latest
+    needs: deploy
+    steps:
+      - name: Deploy chef-node via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 89.58.44.64
+          username: cobra
+          key: ${{ secrets.SCHROMBUS_SSH_KEY }}
+          script: |
+            mkdir -p ~/chef-api
+            cat > ~/chef-api/docker-compose.yml << 'EOF'
+            services:
+              chef-api:
+                image: ghcr.io/wingsofcobra/chef-api:latest
+                container_name: chef-api
+                ports:
+                  - "4242:4242"
+                env_file: .env
+                restart: unless-stopped
+                volumes:
+                  - ./data:/app/data
+                  - /var/run/docker.sock:/var/run/docker.sock
+                healthcheck:
+                  test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4242/system/health"]
+                  interval: 30s
+                  timeout: 5s
+                  retries: 3
+                  start_period: 10s
+            EOF
+            if [ -f ~/chef-api/.env ]; then
+              grep -q "CHEF_NODE_MODE" ~/chef-api/.env && sed -i 's/CHEF_NODE_MODE=.*/CHEF_NODE_MODE=true/' ~/chef-api/.env || echo "CHEF_NODE_MODE=true" >> ~/chef-api/.env
+            else
+              echo "CHEF_NODE_MODE=true" > ~/chef-api/.env
+              echo "PORT=4242" >> ~/chef-api/.env
+              echo "HOST=0.0.0.0" >> ~/chef-api/.env
+              echo "DOCKER_SOCKET=/var/run/docker.sock" >> ~/chef-api/.env
+            fi
+            cd ~/chef-api
+            docker compose pull
+            docker compose down
+            docker compose up -d
+            docker image prune -f
+            echo "chef-node deployed to schrombus"
