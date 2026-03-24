@@ -23,7 +23,6 @@ async function buildApp() {
   const { default: emailRoutes } = await import('./routes/email')
   const { default: servicesRoutes } = await import('./routes/services')
   const { default: alertsRoutes } = await import('./routes/alerts')
-  const { default: secretsRoutes } = await import('./routes/secrets')
   const { default: ansibleRoutes } = await import('./routes/ansible')
   const { default: metricsRoutes } = await import('./routes/metrics')
   const { default: dashboardsRoutes } = await import('./routes/dashboards')
@@ -104,7 +103,6 @@ async function buildApp() {
     await fastify.register(logsRoutes, { prefix: '/logs' })
     await fastify.register(emailRoutes, { prefix: '/email' })
     await fastify.register(alertsRoutes, { prefix: '/alerts' })
-    await fastify.register(secretsRoutes, { prefix: '/secrets' })
     await fastify.register(ansibleRoutes, { prefix: '/ansible' })
     await fastify.register(wsRoutes, { prefix: '/ws' })
   }
